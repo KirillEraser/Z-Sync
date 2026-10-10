@@ -269,7 +269,7 @@ final class MiniBrowserModelTests: XCTestCase {
 
         XCTAssertEqual(
             model.pinNotice,
-            "\(String(localized: "browser.pin_failed")) \(ZenCompanion.SyncError.conflict.zenUserMessage)"
+            "\(String(localized: "browser.pin_failed")) \(String(localized: "error.conflict"))"
         )
     }
 
