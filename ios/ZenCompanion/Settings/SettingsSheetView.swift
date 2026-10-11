@@ -78,7 +78,7 @@ struct SettingsSheet: View {
                                     .frame(width: 44, height: 54)
                                     .background(Color.red.opacity(scheme == .dark ? 0.15 : 0.08), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(PressedButtonStyle())
                             .accessibilityLabel(Text("home.sign_out"))
                         }
 
@@ -137,7 +137,7 @@ struct SettingsSheet: View {
                                 .frame(minHeight: 54)
                                 .contentShape(Rectangle())
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(PressedButtonStyle())
 
                             Rectangle()
                                 .fill(Palette.ink(scheme).opacity(0.15))
@@ -284,7 +284,7 @@ struct SettingsSheet: View {
                                 .frame(minHeight: 54)
                                 .contentShape(Rectangle())
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(PressedButtonStyle())
                         }
                         .background(Palette.lift(scheme), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                         .padding(.top, 8)
@@ -342,7 +342,7 @@ struct SettingsSheet: View {
                                 .frame(minHeight: 52)
                                 .contentShape(Rectangle())
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(PressedButtonStyle())
                         }
                         .background(Palette.lift(scheme), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                     }
@@ -507,7 +507,7 @@ private struct SearchEngineSettingsView: View {
                 }
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PressedButtonStyle())
 
             if !engine.isBuiltIn {
                 Button(role: .destructive) {
@@ -517,7 +517,7 @@ private struct SearchEngineSettingsView: View {
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(Color.red.opacity(0.8))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressedButtonStyle())
                 .accessibilityLabel(Text("Delete"))
             }
         }
@@ -547,7 +547,7 @@ private struct SearchEngineSettingsView: View {
             .frame(minHeight: 54)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressedButtonStyle())
         .background(Palette.lift(scheme), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
@@ -648,7 +648,7 @@ private struct AddSearchEngineView: View {
                 .frame(height: 48)
                 .background(Palette.coral(scheme), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressedButtonStyle())
     }
 
     private var fieldDivider: some View {

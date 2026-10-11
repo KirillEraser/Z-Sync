@@ -127,8 +127,8 @@ internal fun SyncSetupHint(
             Row(
                 modifier = Modifier
                     .weight(1f)
-                    .clip(RoundedCornerShape(12.dp))
                     .clickableNoIndication(onClick = onOpen)
+                    .clip(RoundedCornerShape(12.dp))
                     .padding(vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {

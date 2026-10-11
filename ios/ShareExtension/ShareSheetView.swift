@@ -173,7 +173,7 @@ struct ShareSheetView: View {
                     .background(model.canSave ? Palette.ink(effectiveScheme) : Palette.ink(effectiveScheme).opacity(0.28), in: Capsule())
                     .contentShape(Capsule())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressedButtonStyle())
                 .disabled(!model.canSave)
 
                 Button(action: cancel) {
@@ -184,7 +184,7 @@ struct ShareSheetView: View {
                         .padding(.vertical, 10)
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressedButtonStyle())
             }
             .padding(.horizontal, 24)
             .padding(.bottom, 28)
@@ -220,7 +220,7 @@ struct ShareSheetView: View {
                         .background(Palette.ink(effectiveScheme), in: Capsule())
                         .contentShape(Capsule())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressedButtonStyle())
                 .padding(.horizontal, 24)
                 .padding(.top, 8)
             }

@@ -154,7 +154,7 @@ struct SyncedActivitySheet: View {
                     .background(Palette.lift(scheme), in: Capsule())
                     .foregroundStyle(Palette.ink(scheme))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PressedButtonStyle())
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -194,7 +194,7 @@ private struct HistoryRow: View {
             .padding(.vertical, 8)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressedButtonStyle())
         .accessibilityHint(Text(entry.url))
     }
 

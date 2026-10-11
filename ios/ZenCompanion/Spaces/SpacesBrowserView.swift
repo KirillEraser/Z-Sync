@@ -337,9 +337,10 @@ struct SpacesBrowserView: View {
                 .frame(width: 44, height: 44)
                 .background(
                     Palette.lift(scheme),
-                    in: RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    in: RoundedRectangle(cornerRadius: Palette.liftCornerRadius, style: .continuous)
                 )
-                .contentShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+                .glassRim(cornerRadius: Palette.liftCornerRadius)
+                .contentShape(RoundedRectangle(cornerRadius: Palette.liftCornerRadius, style: .continuous))
         }
         .buttonStyle(SquircleButtonStyle())
         .accessibilityLabel(Text(LocalizedStringKey(accessibilityKey)))
@@ -366,9 +367,10 @@ struct SpacesBrowserView: View {
             .frame(height: 44)
             .background(
                 Palette.lift(scheme),
-                in: RoundedRectangle(cornerRadius: 13, style: .continuous)
+                in: RoundedRectangle(cornerRadius: Palette.liftCornerRadius, style: .continuous)
             )
-            .contentShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+            .glassRim(cornerRadius: Palette.liftCornerRadius)
+            .contentShape(RoundedRectangle(cornerRadius: Palette.liftCornerRadius, style: .continuous))
         }
         .buttonStyle(SquircleButtonStyle())
         .accessibilityLabel(Text("browser.web_placeholder"))
@@ -426,7 +428,7 @@ struct SpacesBrowserView: View {
                         .background(Palette.lift(scheme), in: Capsule())
                         .foregroundStyle(Palette.ink(scheme))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressedButtonStyle())
             }
         }
     }
@@ -473,7 +475,7 @@ struct FolderBlock: View {
                 .padding(.vertical, 9)
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PressedButtonStyle())
 
             if isExpanded {
                 ForEach(folder.tabs) { tab in

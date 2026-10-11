@@ -35,4 +35,45 @@ enum Palette {
             ? Color.white.opacity(0.07)
             : Color.black.opacity(0.06)
     }
+
+    /// Continuous corner on the lift tiles. 16pt on a 44pt side is large
+    /// enough to read as a squircle, and still leaves a flat edge.
+    static let liftCornerRadius: CGFloat = 16
+
+}
+
+extension View {
+    /// Flat hairline for lift tiles. One color, just stronger than the lift
+    /// fill (0.06–0.07), so the edge does not read as a separate line.
+    /// Width stays 0.5. Stays inside the shape so neighboring tiles do not
+    /// share an edge.
+    func glassRim(cornerRadius: CGFloat) -> some View {
+        overlay {
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
+                .allowsHitTesting(false)
+        }
+    }
+
+    /// Pressed state for a custom button. Starts the moment the finger goes
+    /// down and stays until it lifts. Scale stays off when motion is reduced.
+    func pressedFeedback(isPressed: Bool, reduceMotion: Bool) -> some View {
+        self
+            .scaleEffect(reduceMotion || !isPressed ? 1 : 0.94)
+            .opacity(isPressed ? 0.58 : 1)
+            .animation(.easeOut(duration: reduceMotion ? 0.01 : 0.08), value: isPressed)
+    }
+}
+
+/// Replaces `.plain` where the label draws itself. `.plain` swallows the
+/// system highlight, so a held finger otherwise changes nothing.
+struct PressedButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label.pressedFeedback(
+            isPressed: configuration.isPressed,
+            reduceMotion: reduceMotion
+        )
+    }
 }
