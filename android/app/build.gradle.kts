@@ -20,8 +20,8 @@ android {
         applicationId = "de.kjell.zencompanion"
         minSdk = 26
         targetSdk = 36
-        versionCode = 7
-        versionName = "1.4"
+        versionCode = 8
+        versionName = "1.4.1"
         vectorDrawables { useSupportLibrary = true }
     }
 

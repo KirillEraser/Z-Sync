@@ -29,7 +29,7 @@ cd android
 
 (If `./gradlew` is missing, run `gradle wrapper --gradle-version 9.7.1` once.)
 
-Package: `de.kjell.zencompanion` · versionName `1.4` · versionCode `7` ·
+Package: `de.kjell.zencompanion` · versionName `1.4.1` · versionCode `8` ·
 minSdk 26 · targetSdk 36 · compileSdk 37 · portrait-only.
 
 Toolchain: Gradle 9.7.1 · AGP 9.4.1 · built-in Kotlin (Compose compiler plugin
