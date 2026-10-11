@@ -51,6 +51,12 @@ final class SettingsModel {
         }
     }
 
+    /// Open the mini-browser with the search field focused whenever the app
+    /// comes to the foreground. Off by default; read by `BrowserModel`.
+    var openIntoSearch: Bool {
+        didSet { preferences.setBool(openIntoSearch, PreferenceKeys.openIntoSearch, scope: .standard) }
+    }
+
     private let searchEngine: SearchEngineProviding
     private let preferences: PreferencesStoring
     private let signerOut: SessionSigningOut
@@ -72,6 +78,7 @@ final class SettingsModel {
         self.essentialsGrouping = Self.loadEssentialsGrouping(preferences)
         self.saveKind = Self.loadSaveKind(preferences)
         self.toolbarPlacement = Self.loadToolbarPlacement(preferences)
+        self.openIntoSearch = preferences.bool(PreferenceKeys.openIntoSearch, scope: .standard)
     }
 
     private static func loadEssentialsGrouping(_ preferences: PreferencesStoring) -> EssentialsGrouping {

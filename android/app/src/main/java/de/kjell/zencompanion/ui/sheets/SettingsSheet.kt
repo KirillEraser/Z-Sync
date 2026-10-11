@@ -77,6 +77,7 @@ fun SettingsSheet(
     onSetEssentialsGrouping: (ZenSpaces.EssentialsGrouping) -> Unit,
     onSetSaveKind: (SaveKind) -> Unit,
     onSetToolbarPlacement: (ToolbarPlacement) -> Unit,
+    onSetOpenIntoSearch: (Boolean) -> Unit,
     onSignOut: () -> Unit,
     onDone: () -> Unit,
 ) {
@@ -297,6 +298,7 @@ fun SettingsSheet(
                 onSetAlwaysOpenExternally = onSetAlwaysOpenExternally,
                 onSetSaveKind = onSetSaveKind,
                 onSetToolbarPlacement = onSetToolbarPlacement,
+                onSetOpenIntoSearch = onSetOpenIntoSearch,
                 onOpenAdvanced = { showAdvanced = true },
             )
 

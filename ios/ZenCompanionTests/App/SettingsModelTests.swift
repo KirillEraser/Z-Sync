@@ -12,6 +12,19 @@ final class SettingsModelTests: XCTestCase {
         )
     }
 
+    // MARK: - Open into search
+
+    func testOpenIntoSearchIsOffByDefaultAndPersists() {
+        let prefs = FakePreferences()
+        let model = makeModel(prefs)
+        XCTAssertFalse(model.openIntoSearch)
+
+        model.openIntoSearch = true
+
+        XCTAssertTrue(prefs.bool(PreferenceKeys.openIntoSearch, scope: .standard))
+        XCTAssertTrue(makeModel(prefs).openIntoSearch)
+    }
+
     // MARK: - Toolbar placement
 
     func testToolbarPlacementDefaultsToBottom() {

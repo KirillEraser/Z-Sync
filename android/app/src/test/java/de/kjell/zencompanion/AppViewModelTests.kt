@@ -206,6 +206,63 @@ class AppViewModelTests {
         assertEquals(ToolbarPlacement.BOTTOM, ToolbarPlacement.fromStorage("bottom"))
     }
 
+    private fun oneSpaceBrowser() = FakeBrowserRepository(
+        snapshot = ZenSpaces.ZenSnapshot(
+            listOf(ZenSpaces.ZenSpace("s1", "One", null, null, null, emptyList())),
+        ),
+    )
+
+    private fun searchPreferences(enabled: Boolean = true) =
+        FakePreferencesRepository().apply { state = state.copy(openIntoSearch = enabled) }
+
+    @Test
+    fun openIntoSearchAsksOncePerTripToTheForeground() = runTest(mainDispatcherRule.testDispatcher) {
+        val vm = newViewModel(browser = oneSpaceBrowser(), preferences = searchPreferences())
+        vm.completeSignIn(snapshot())
+        advanceUntilIdle()
+
+        vm.appCameToForeground()
+        assertEquals(true, vm.searchOnOpenPending.value)
+        vm.consumeSearchOnOpen()
+
+        // A config change or a second start without leaving: no new tab.
+        vm.appCameToForeground()
+        assertEquals(false, vm.searchOnOpenPending.value)
+
+        vm.appWentToBackground()
+        vm.appCameToForeground()
+        assertEquals(true, vm.searchOnOpenPending.value)
+    }
+
+    @Test
+    fun openIntoSearchStaysOnSpacesWhenOff() = runTest(mainDispatcherRule.testDispatcher) {
+        val vm = newViewModel(browser = oneSpaceBrowser(), preferences = searchPreferences(enabled = false))
+        vm.completeSignIn(snapshot())
+        advanceUntilIdle()
+
+        vm.appCameToForeground()
+        vm.appWentToBackground()
+        vm.appCameToForeground()
+
+        assertEquals(false, vm.searchOnOpenPending.value)
+    }
+
+    @Test
+    fun openIntoSearchSkipsAnOpenWithoutSpaces() = runTest(mainDispatcherRule.testDispatcher) {
+        val vm = newViewModel(browser = oneSpaceBrowser(), preferences = searchPreferences())
+
+        // First launch after sign-in: the screen starts before any spaces load.
+        vm.appCameToForeground()
+        vm.completeSignIn(snapshot())
+        advanceUntilIdle()
+        vm.appCameToForeground()
+        assertEquals(false, vm.searchOnOpenPending.value)
+
+        vm.appWentToBackground()
+        vm.appCameToForeground()
+        assertEquals(true, vm.searchOnOpenPending.value)
+    }
+
     @Test
     fun selectSpacePersistsOnlyValidIndex() = runTest(mainDispatcherRule.testDispatcher) {
         val space = ZenSpaces.ZenSpace(
@@ -580,6 +637,10 @@ private class FakePreferencesRepository : PreferencesRepository {
 
     override fun setToolbarPlacement(placement: ToolbarPlacement) {
         state = state.copy(toolbarPlacement = placement)
+    }
+
+    override fun setOpenIntoSearch(enabled: Boolean) {
+        state = state.copy(openIntoSearch = enabled)
     }
 
     override fun syncSetupHintDismissed(): Boolean = syncSetupDismissedFlag

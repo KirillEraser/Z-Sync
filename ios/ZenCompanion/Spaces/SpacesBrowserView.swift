@@ -287,10 +287,17 @@ struct SpacesBrowserView: View {
             }
         }
         .onChange(of: scenePhase) { _, phase in
+            if phase == .background { model.sceneEnteredBackground() }
             // Returning to the foreground (e.g. after sharing via the share
             // extension) refreshes what's on screen against the server.
             guard phase == .active else { return }
             Task { await model.sceneBecameActive() }
+        }
+        .onChange(of: model.searchOnOpenPending) { _, pending in
+            guard pending else { return }
+            // Leave an open browser or settings sheet where the user left it.
+            if activeSheet == nil { openNewTab(in: model.activeSpace) }
+            model.consumeSearchOnOpen()
         }
         .onChange(of: model.reviewPromptPending) { _, pending in
             guard pending else { return }

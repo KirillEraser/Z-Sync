@@ -162,6 +162,8 @@ data class PreferencesState(
     val saveKind: SaveKind = SaveKind.PINNED,
     /** Where the action bar sits: below the switcher (default) or above the essentials grid. */
     val toolbarPlacement: ToolbarPlacement = ToolbarPlacement.BOTTOM,
+    /** Open a new search tab whenever the app comes to the foreground. */
+    val openIntoSearch: Boolean = false,
 )
 
 /**
@@ -176,6 +178,7 @@ interface PreferencesRepository {
     fun setEssentialsGrouping(grouping: ZenSpaces.EssentialsGrouping)
     fun setSaveKind(kind: SaveKind)
     fun setToolbarPlacement(placement: ToolbarPlacement)
+    fun setOpenIntoSearch(enabled: Boolean)
     fun syncSetupHintDismissed(): Boolean
     fun setSyncSetupHintDismissed(dismissed: Boolean)
     fun didShowShareExtensionTip(): Boolean
@@ -196,6 +199,7 @@ internal class AndroidPreferencesRepository(private val context: Context) : Pref
         ),
         saveKind = BrowserSettings.getSaveKind(context),
         toolbarPlacement = BrowserSettings.getToolbarPlacement(context),
+        openIntoSearch = BrowserSettings.getOpenIntoSearch(context),
     )
 
     override fun setSearchEngine(engine: SearchEngine) = SearchEngines.set(context, engine)
@@ -212,6 +216,9 @@ internal class AndroidPreferencesRepository(private val context: Context) : Pref
 
     override fun setToolbarPlacement(placement: ToolbarPlacement) =
         BrowserSettings.setToolbarPlacement(context, placement)
+
+    override fun setOpenIntoSearch(enabled: Boolean) =
+        BrowserSettings.setOpenIntoSearch(context, enabled)
 
     override fun syncSetupHintDismissed(): Boolean =
         onboardingPrefs().getBoolean(KEY_DISMISSED_SYNC_SETUP, false)
@@ -297,12 +304,21 @@ class AppViewModel(
     private val _reviewRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val reviewRequests: SharedFlow<Unit> = _reviewRequests
 
+    // Set when the app opens with "Open into search" on; the spaces screen
+    // consumes it by opening a new tab.
+    private val _searchOnOpenPending = MutableStateFlow(false)
+    val searchOnOpenPending: StateFlow<Boolean> = _searchOnOpenPending
+
     private var reloadJob: Job? = null
     private var reviewJob: Job? = null
     private var reloading = false
     private var bootstrapped = false
     private var reviewArmedThisProcess = false
     private var reviewWaitElapsed = false
+
+    // True from process start and after each trip to the background, until
+    // the next open has been considered for "Open into search".
+    private var searchOnOpenArmed = true
 
     private fun BrowserState.withCachedSnapshot(): BrowserState {
         if (_session.value == null) return this
@@ -687,6 +703,32 @@ class AppViewModel(
     fun setToolbarPlacement(placement: ToolbarPlacement) {
         preferencesRepository.setToolbarPlacement(placement)
         _preferences.value = _preferences.value.copy(toolbarPlacement = placement)
+    }
+
+    fun setOpenIntoSearch(enabled: Boolean) {
+        preferencesRepository.setOpenIntoSearch(enabled)
+        _preferences.value = _preferences.value.copy(openIntoSearch = enabled)
+    }
+
+    /**
+     * The spaces screen started: on launch, or back from the background. Asks
+     * for a new tab once per open when the setting is on and there is a space
+     * to pin into, so a first launch without cached spaces shows the spaces.
+     */
+    fun appCameToForeground() {
+        if (!searchOnOpenArmed) return
+        searchOnOpenArmed = false
+        if (_preferences.value.openIntoSearch && _browser.value.snapshot.spaces.isNotEmpty()) {
+            _searchOnOpenPending.value = true
+        }
+    }
+
+    fun appWentToBackground() {
+        searchOnOpenArmed = true
+    }
+
+    fun consumeSearchOnOpen() {
+        _searchOnOpenPending.value = false
     }
 
     /** Loads (or retries) the synced browsing history into [activity]. */
