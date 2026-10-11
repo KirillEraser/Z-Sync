@@ -47,6 +47,7 @@ struct ZeroSpacesHelp: View {
                             .padding(.horizontal, 20)
                             .padding(.vertical, 12)
                             .background(Palette.lift(scheme), in: Capsule())
+                            .glassRimCapsule()
                             .foregroundStyle(Palette.ink(scheme))
                     }
                     .buttonStyle(PressedButtonStyle())
@@ -110,14 +111,7 @@ struct SyncSetupHint: View {
         .padding(.leading, 12)
         .padding(.trailing, 6)
         .padding(.vertical, 10)
-        .background(
-            Palette.lift(scheme),
-            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(Palette.ink(scheme).opacity(0.08), lineWidth: 1)
-        )
+        .liftCard(scheme)
     }
 }
 

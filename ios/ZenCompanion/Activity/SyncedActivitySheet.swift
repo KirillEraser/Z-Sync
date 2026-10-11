@@ -121,7 +121,7 @@ struct SyncedActivitySheet: View {
             VStack(alignment: .leading, spacing: 0) {
                 content()
             }
-            .background(Palette.lift(scheme), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .liftCard(scheme)
         }
     }
 
@@ -152,6 +152,7 @@ struct SyncedActivitySheet: View {
                     .padding(.horizontal, 20)
                     .padding(.vertical, 12)
                     .background(Palette.lift(scheme), in: Capsule())
+                    .glassRimCapsule()
                     .foregroundStyle(Palette.ink(scheme))
             }
             .buttonStyle(PressedButtonStyle())

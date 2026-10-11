@@ -149,6 +149,7 @@ struct ShareSheetView: View {
                 Capsule(style: .continuous)
                     .fill(Palette.lift(effectiveScheme))
             )
+            .glassRimCapsule()
             .padding(.top, 28)
             .padding(.horizontal, 24)
             .accessibilityLabel(Text("share.workspace"))

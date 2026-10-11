@@ -1,6 +1,5 @@
 package de.kjell.zencompanion.ui.components
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -30,7 +29,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
@@ -41,6 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import de.kjell.zencompanion.R
 import de.kjell.zencompanion.sync.ZenSpaces
+import de.kjell.zencompanion.ui.theme.liftBorder
 import de.kjell.zencompanion.ui.theme.pressFeedback
 
 /** Adaptive columns: 1-4 single row, 5-6 -> 3 cols, 7+ -> 4 cols. */
@@ -106,8 +105,6 @@ private fun EssentialTile(
     val zen = de.kjell.zencompanion.ui.theme.LocalZenColors.current
     val shape = RoundedCornerShape(16.dp)
     val source = remember { MutableInteractionSource() }
-    // Same hairline as the action bar. The fill stays lift.
-    val rim = (if (zen.isDark) Color.White else Color.Black).copy(alpha = 0.08f)
 
     Card(
         modifier = Modifier
@@ -131,7 +128,7 @@ private fun EssentialTile(
                 customActions = listOf(CustomAccessibilityAction(renameText) { showRename = true; true })
             },
         shape = shape,
-        border = BorderStroke(0.5.dp, rim),
+        border = liftBorder(),
         colors = CardDefaults.cardColors(
             // Same lift color as the top-bar cards (iOS: Palette.lift) so all
             // tile backgrounds match across the screen.

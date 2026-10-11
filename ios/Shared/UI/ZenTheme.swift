@@ -40,19 +40,49 @@ enum Palette {
     /// enough to read as a squircle, and still leaves a flat edge.
     static let liftCornerRadius: CGFloat = 16
 
+    /// One hairline weight for every lift surface, so a tile and a settings
+    /// card share the same edge. Android keeps its own slightly lighter pair
+    /// in `ButtonChrome.kt`.
+    static let rimWidth: CGFloat = 0.5
+    static let rimOpacity: Double = 0.08
+
 }
 
 extension View {
-    /// Flat hairline for lift tiles. One color, just stronger than the lift
+    /// Flat hairline for lift surfaces. One color, just stronger than the lift
     /// fill (0.06–0.07), so the edge does not read as a separate line.
     /// Width stays 0.5. Stays inside the shape so neighboring tiles do not
     /// share an edge.
     func glassRim(cornerRadius: CGFloat) -> some View {
         overlay {
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
+                .strokeBorder(Color.primary.opacity(Palette.rimOpacity), lineWidth: Palette.rimWidth)
                 .allowsHitTesting(false)
         }
+    }
+
+    /// Same hairline on a pill. Capsules are the other lift shape in the app.
+    func glassRimCapsule() -> some View {
+        overlay {
+            Capsule(style: .continuous)
+                .strokeBorder(Color.primary.opacity(Palette.rimOpacity), lineWidth: Palette.rimWidth)
+                .allowsHitTesting(false)
+        }
+    }
+
+    /// The one card look: lift fill plus the hairline rim, on the shared
+    /// continuous corner. Every tappable card uses this so the chrome reads
+    /// the same on every screen.
+    func liftCard(
+        _ scheme: ColorScheme,
+        cornerRadius: CGFloat = Palette.liftCornerRadius
+    ) -> some View {
+        self
+            .background(
+                Palette.lift(scheme),
+                in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            )
+            .glassRim(cornerRadius: cornerRadius)
     }
 
     /// Pressed state for a custom button. Starts the moment the finger goes

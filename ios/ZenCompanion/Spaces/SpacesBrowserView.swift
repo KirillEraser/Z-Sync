@@ -426,6 +426,7 @@ struct SpacesBrowserView: View {
                         .padding(.horizontal, 20)
                         .padding(.vertical, 12)
                         .background(Palette.lift(scheme), in: Capsule())
+                        .glassRimCapsule()
                         .foregroundStyle(Palette.ink(scheme))
                 }
                 .buttonStyle(PressedButtonStyle())
