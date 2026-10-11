@@ -4,6 +4,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -49,6 +50,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import de.kjell.zencompanion.R
 import de.kjell.zencompanion.sync.ZenSpaces
+import de.kjell.zencompanion.ui.theme.pressFeedback
 
 internal fun displayTitle(tab: ZenSpaces.ZenTab): String = tab.displayTitle
 
@@ -75,14 +77,18 @@ fun SplitRow(
     val context = LocalContext.current
     var menuOpen by remember { mutableStateOf(false) }
     val deleteText = stringResource(R.string.tabs_unsplit)
+    val source = remember { MutableInteractionSource() }
 
     Surface(
         color = Color.Transparent,
         shape = RoundedCornerShape(12.dp),
         modifier = modifier
+            .pressFeedback(source)
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .combinedClickable(
+                interactionSource = source,
+                indication = null,
                 onClick = {},
                 onLongClick = { menuOpen = true },
             )
@@ -153,9 +159,16 @@ private fun SplitCell(
     modifier: Modifier = Modifier,
     onOpenUrl: (String, String?) -> Unit,
 ) {
+    val source = remember { MutableInteractionSource() }
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = modifier.clickable { onOpenUrl(tab.url, tab.displayTitle) },
+        modifier = modifier
+            .pressFeedback(source)
+            .clickable(
+                interactionSource = source,
+                indication = null,
+                onClick = { onOpenUrl(tab.url, tab.displayTitle) },
+            ),
     ) {
         ZenTabIcon(tab = tab, size = 28.dp)
 
@@ -234,14 +247,18 @@ fun TabRow(
     val deleteText = stringResource(R.string.tabs_delete)
     val renameText = stringResource(R.string.tabs_rename)
     val titleText = displayTitle(tab)
+    val source = remember { MutableInteractionSource() }
 
     Surface(
         color = Color.Transparent,
         shape = RoundedCornerShape(12.dp),
         modifier = modifier
+            .pressFeedback(source)
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .combinedClickable(
+                interactionSource = source,
+                indication = null,
                 onClick = {
                     if (onOpenUrl != null) {
                         onOpenUrl(tab.url, tab.displayTitle)
