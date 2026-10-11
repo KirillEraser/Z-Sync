@@ -23,9 +23,18 @@ public struct SearchEngine: Identifiable, Hashable, Codable, Sendable {
 
     /// The search URL for `query`, or nil when the template is unusable.
     public func searchURL(for query: String) -> URL? {
-        guard let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { return nil }
+        guard let encoded = query.addingPercentEncoding(withAllowedCharacters: Self.queryValueAllowed) else { return nil }
         return URL(string: template.replacingOccurrences(of: SearchEngine.queryPlaceholder, with: encoded))
     }
+}
+
+extension SearchEngine {
+    /// RFC 3986 unreserved characters. `.urlQueryAllowed` keeps `&`, `+`, `=`
+    /// and `#`, which split or rewrite the query: "AT&T" searched for "AT"
+    /// and "c++" for "c". Android's `URLEncoder` already escapes them.
+    static let queryValueAllowed = CharacterSet(
+        charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"
+    )
 }
 
 // MARK: - Built-ins
