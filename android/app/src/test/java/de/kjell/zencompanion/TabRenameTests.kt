@@ -5,6 +5,7 @@ import de.kjell.zencompanion.sync.SpacesSyncService
 import de.kjell.zencompanion.sync.ZenSpaces
 import de.kjell.zencompanion.ui.components.PinDestinationModel
 import de.kjell.zencompanion.ui.components.TabMove
+import de.kjell.zencompanion.ui.components.TabPin
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -130,6 +131,12 @@ class TabRenameTests {
     }
 
     @Test
+    fun pinIsOfferedOnlyOnNormalTabs() {
+        assertTrue(TabPin.offersPin(isNormalTab = true))
+        assertFalse(TabPin.offersPin(isNormalTab = false))
+    }
+
+    @Test
     fun moveDestinationsMarkCurrentPlace() {
         val folders = listOf(
             PinDestinationModel.FolderEntry("outer", "Outer", 0),
@@ -219,6 +226,39 @@ class TabRenameTests {
         val same = SpacesSyncCacheOps.moveTab(snapshot, "t1", "f1", "s1", 5L)
         assertEquals(0L, same.fetchedAtMillis)
         assertEquals("Keep", folderTab(same, "t1")?.staticLabel)
+    }
+
+    @Test
+    fun cachePinMovesNormalTabToPinnedRootKeepingFields() {
+        val normal = ZenSpaces.ZenTab(id = "n1", url = "https://n.example", title = "Normal", staticLabel = "Keep")
+        val pinned = ZenSpaces.ZenTab(id = "t1", url = "https://a.example", title = "Pinned")
+        val snapshot = ZenSpaces.ZenSnapshot(
+            spaces = listOf(
+                ZenSpaces.ZenSpace(
+                    id = "s1",
+                    name = "Space",
+                    icon = null,
+                    containerGuid = null,
+                    theme = null,
+                    pinned = listOf(ZenSpaces.ZenItem.Tab(pinned)),
+                    tabs = listOf(ZenSpaces.ZenItem.Tab(normal)),
+                ),
+            ),
+            essentials = emptyMap(),
+            fetchedAtMillis = 0L,
+        )
+
+        val pinnedSnapshot = SpacesSyncCacheOps.pinTab(snapshot, "n1", "s1", 5L)
+        assertTrue(pinnedSnapshot.spaces.first().tabs.isEmpty())
+        assertEquals(listOf("t1", "n1"), pinnedSnapshot.spaces.first().pinned.map { it.id })
+        assertEquals("Keep", pinnedTab(pinnedSnapshot, "n1")?.staticLabel)
+        assertEquals("https://n.example", pinnedTab(pinnedSnapshot, "n1")?.url)
+        assertEquals(5L, pinnedSnapshot.fetchedAtMillis)
+
+        // A tab that is not in the normal bucket (already pinned) is untouched.
+        val same = SpacesSyncCacheOps.pinTab(snapshot, "t1", "s1", 5L)
+        assertEquals(0L, same.fetchedAtMillis)
+        assertEquals(listOf("n1"), same.spaces.first().tabs.map { it.id })
     }
 
     private fun pinnedTab(snapshot: ZenSpaces.ZenSnapshot, id: String): ZenSpaces.ZenTab? =

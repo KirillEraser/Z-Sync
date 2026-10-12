@@ -251,6 +251,80 @@ class AppViewModelTests {
         assertEquals("tab-1" to "  Work  ", browser.renamed.single())
     }
 
+    @Test
+    fun pinTabMovesRowToPinnedSectionAndForwardsWrite() = runTest(mainDispatcherRule.testDispatcher) {
+        val normal = ZenSpaces.ZenTab(id = "n1", url = "https://n.example", title = "Normal", staticLabel = "Keep")
+        val pinnedSnapshot = ZenSpaces.ZenSnapshot(
+            spaces = listOf(
+                ZenSpaces.ZenSpace(
+                    id = "s1",
+                    name = "One",
+                    icon = null,
+                    containerGuid = null,
+                    theme = null,
+                    pinned = emptyList(),
+                    tabs = listOf(ZenSpaces.ZenItem.Tab(normal)),
+                ),
+            ),
+        )
+        val browser = FakeBrowserRepository(snapshot = pinnedSnapshot)
+        val vm = newViewModel(browser = browser)
+        vm.completeSignIn(snapshot())
+        advanceUntilIdle()
+
+        vm.pinTab("n1", "s1")
+
+        // The row leaves the normal section synchronously, before the write.
+        val space = vm.browser.value.snapshot.spaces.first()
+        assertTrue(space.tabs.isEmpty())
+        assertEquals(listOf("n1"), space.pinned.map { it.id })
+        assertEquals("Keep", (space.pinned.single() as ZenSpaces.ZenItem.Tab).tab.staticLabel)
+
+        runCurrent()
+        assertEquals("n1" to "s1", browser.pinnedTabs.single())
+    }
+
+    @Test
+    fun pinTabReloadsAndSnapsBackWhenWriteFails() = runTest(mainDispatcherRule.testDispatcher) {
+        val original = ZenSpaces.ZenSnapshot(
+            spaces = listOf(
+                ZenSpaces.ZenSpace(
+                    id = "s1",
+                    name = "One",
+                    icon = null,
+                    containerGuid = null,
+                    theme = null,
+                    pinned = emptyList(),
+                    tabs = listOf(
+                        ZenSpaces.ZenItem.Tab(
+                            ZenSpaces.ZenTab(id = "n1", url = "https://n.example", title = "Normal"),
+                        ),
+                    ),
+                ),
+            ),
+        )
+        val browser = FakeBrowserRepository(snapshot = original).apply {
+            pinError = RuntimeException("boom")
+        }
+        val vm = newViewModel(browser = browser)
+        vm.completeSignIn(snapshot())
+        advanceUntilIdle()
+        val refreshesBefore = browser.refreshCalls
+
+        vm.pinTab("n1", "s1")
+
+        // The optimistic move happens synchronously...
+        assertTrue(vm.browser.value.snapshot.spaces.first().tabs.isEmpty())
+        advanceUntilIdle()
+
+        // ...and the failed write reloads, so the row snaps back to normal.
+        val space = vm.browser.value.snapshot.spaces.first()
+        assertEquals(listOf("n1"), space.tabs.map { it.id })
+        assertTrue(space.pinned.isEmpty())
+        assertEquals("n1" to "s1", browser.pinnedTabs.single())
+        assertTrue(browser.refreshCalls > refreshesBefore)
+    }
+
     private fun snapshotWithPinnedTab(): ZenSpaces.ZenSnapshot {
         val tab = ZenSpaces.ZenTab(id = "tab-1", url = "https://example.com", title = "Example")
         val space = ZenSpaces.ZenSpace(
@@ -422,6 +496,8 @@ private class FakeBrowserRepository(
     val added = mutableListOf<AddedTab>()
     val deleted = mutableListOf<String>()
     val renamed = mutableListOf<Pair<String, String>>()
+    val pinnedTabs = mutableListOf<Pair<String, String>>()
+    var pinError: Throwable? = null
     var lastSpace: String? = null
     var refreshGate: CompletableDeferred<Unit>? = null
     var refreshCalls = 0
@@ -462,6 +538,11 @@ private class FakeBrowserRepository(
     }
 
     override suspend fun moveTab(id: String, spaceId: String, folderId: String?) = Unit
+
+    override suspend fun pinTab(id: String, spaceId: String) {
+        pinnedTabs += id to spaceId
+        pinError?.let { throw it }
+    }
 
     override fun isDemo(): Boolean = demo
 
