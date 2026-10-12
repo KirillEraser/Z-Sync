@@ -1,5 +1,7 @@
 package de.kjell.zencompanion.ui.screens
 
+import android.webkit.WebView
+
 internal enum class BrowserLinkAction {
     LOAD_IN_WEBVIEW,
     OPEN_EXTERNALLY,
@@ -40,4 +42,13 @@ internal fun sameTabUrl(raw: String?): String? {
     val scheme = trimmed.substringBefore(':', missingDelimiterValue = "").lowercase()
     if (scheme != "http" && scheme != "https") return null
     return trimmed
+}
+
+/**
+ * Address a tapped new-window link should load in the only tab. Only plain links count:
+ * for an image link the hit test reports the image, not the link, so the popup finds it.
+ */
+internal fun tappedLinkUrl(hitType: Int, extra: String?): String? {
+    if (hitType != WebView.HitTestResult.SRC_ANCHOR_TYPE) return null
+    return sameTabUrl(extra)
 }

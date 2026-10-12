@@ -1,8 +1,10 @@
 package de.kjell.zencompanion
 
+import android.webkit.WebView
 import de.kjell.zencompanion.ui.screens.BrowserLinkAction
 import de.kjell.zencompanion.ui.screens.browserLinkAction
 import de.kjell.zencompanion.ui.screens.sameTabUrl
+import de.kjell.zencompanion.ui.screens.tappedLinkUrl
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -110,6 +112,24 @@ class BrowserLinkPolicyTests {
         assertEquals(null, sameTabUrl("javascript:void(0)"))
         assertEquals(null, sameTabUrl(null))
         assertEquals(null, sameTabUrl("  "))
+    }
+
+    @Test
+    fun tappedTextLinkLoadsInTheSameTab() {
+        assertEquals(
+            "https://example.com/next",
+            tappedLinkUrl(WebView.HitTestResult.SRC_ANCHOR_TYPE, "https://example.com/next"),
+        )
+    }
+
+    @Test
+    fun tappedImageLinkLeavesTheAddressToThePopup() {
+        // For an image link the hit test reports the image, not where the link goes.
+        assertEquals(
+            null,
+            tappedLinkUrl(WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE, "https://example.com/picture.png"),
+        )
+        assertEquals(null, tappedLinkUrl(WebView.HitTestResult.UNKNOWN_TYPE, null))
     }
 
     @Test

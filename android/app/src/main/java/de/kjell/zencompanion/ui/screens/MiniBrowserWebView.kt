@@ -136,7 +136,10 @@ internal fun MiniBrowserWebView(
                         isUserGesture: Boolean,
                         resultMsg: Message,
                     ): Boolean {
-                        val destination = sameTabUrl(view.hitTestResult.extra)
+                        // Only a tap may replace the page. Windows a page opens on its own are dropped.
+                        if (!isUserGesture) return false
+                        val hit = view.hitTestResult
+                        val destination = tappedLinkUrl(hit.type, hit.extra)
                         if (destination != null) {
                             view.loadUrl(destination)
                             return false
