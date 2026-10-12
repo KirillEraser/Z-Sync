@@ -59,7 +59,9 @@ struct MiniBrowserRepresentable: UIViewRepresentable {
         }
 
         func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
-            if navigationAction.targetFrame == nil {
+            // One web view. A new window with a real http(s) address replaces this page.
+            if navigationAction.targetFrame == nil,
+               BrowserNavigationPolicy.sameTabURL(navigationAction.request.url) != nil {
                 webView.load(navigationAction.request)
             }
             return nil

@@ -21,9 +21,11 @@
         </intent>
     </queries>
 
+    <!-- usesCleartextTraffic: Google results 302 from https://www.google.com/goto to http hosts. -->
     <application
         android:name=".ZenCompanionApp"
         android:allowBackup="false"
+        android:usesCleartextTraffic="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"

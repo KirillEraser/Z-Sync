@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.net.Uri
+import android.os.Message
 import android.view.ViewGroup
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -54,6 +55,9 @@ internal fun MiniBrowserWebView(
                     builtInZoomControls = true
                     displayZoomControls = false
                     mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+                    // target=_blank and window.open do nothing unless this is on.
+                    setSupportMultipleWindows(true)
+                    javaScriptCanOpenWindowsAutomatically = true
                 }
                 webViewClient = object : WebViewClient() {
                     override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
@@ -124,6 +128,36 @@ internal fun MiniBrowserWebView(
 
                     override fun onReceivedTitle(view: WebView?, title: String?) {
                         title?.let { onTitleChange(it) }
+                    }
+
+                    override fun onCreateWindow(
+                        view: WebView,
+                        isDialog: Boolean,
+                        isUserGesture: Boolean,
+                        resultMsg: Message,
+                    ): Boolean {
+                        val destination = sameTabUrl(view.hitTestResult.extra)
+                        if (destination != null) {
+                            view.loadUrl(destination)
+                            return false
+                        }
+                        val transport = resultMsg.obj as? WebView.WebViewTransport ?: return false
+                        val popup = WebView(view.context)
+                        popup.settings.javaScriptEnabled = true
+                        popup.webViewClient = object : WebViewClient() {
+                            override fun shouldOverrideUrlLoading(
+                                popupView: WebView,
+                                request: WebResourceRequest,
+                            ): Boolean {
+                                val next = sameTabUrl(request.url?.toString()) ?: return false
+                                view.loadUrl(next)
+                                popupView.post { popupView.destroy() }
+                                return true
+                            }
+                        }
+                        transport.webView = popup
+                        resultMsg.sendToTarget()
+                        return true
                     }
                 }
 

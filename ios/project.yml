@@ -43,6 +43,9 @@ targets:
         ITSAppUsesNonExemptEncryption: false
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
+          # Google result clicks 302 from https://www.google.com/goto to cleartext
+          # http hosts. WKWebView drops that hop unless web content is exempt.
+          NSAllowsArbitraryLoadsInWebContent: true
         NSLocalNetworkUsageDescription: Z-Sync loads the icon of a synced tab from the tab's own address, which may be a device on your local network.
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait

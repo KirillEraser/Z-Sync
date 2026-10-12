@@ -33,3 +33,11 @@ internal fun browserLinkAction(
     }
     return BrowserLinkAction.OPEN_EXTERNALLY
 }
+
+/** http(s) address a new window should load in the only tab. Blank windows stay put. */
+internal fun sameTabUrl(raw: String?): String? {
+    val trimmed = raw?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    val scheme = trimmed.substringBefore(':', missingDelimiterValue = "").lowercase()
+    if (scheme != "http" && scheme != "https") return null
+    return trimmed
+}
