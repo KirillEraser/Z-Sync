@@ -42,8 +42,7 @@ object SpacesSyncService {
             SnapshotCache.cache(sample)
             return sample
         }
-        val client = AccountStore.connect(context)
-        return loadSnapshot(client = client)
+        return AccountStore.withClient(context) { loadSnapshot(client = it) }
     }
 
     /**
@@ -486,7 +485,10 @@ object SpacesSyncService {
 
     /** Loads cached data immediately, then refreshes over the network. */
     suspend fun refresh(context: Context): ZenSpaces.ZenSnapshot {
+        val started = AccountStore.currentGeneration
         val fresh = loadSnapshot(context)
+        // A sign-out during the fetch already deleted the cache; don't refill it.
+        if (!AccountStore.isCurrent(started)) throw SyncError.NotSignedIn
         SnapshotCache.cache(fresh)
         return fresh
     }
@@ -523,8 +525,9 @@ object SpacesSyncService {
             val recordId = addTabLocally(url = url, title = title, spaceId = spaceId, folderId = folderId, kind = kind)
             return AddTabOutcome(recordId = recordId, kind = kind, fellBackToPinned = false)
         }
-        val client = AccountStore.connect(context)
-        return addTab(client = client, url = url, title = title, spaceId = spaceId, folderId = folderId, kind = kind)
+        return AccountStore.withClient(context) {
+            addTab(client = it, url = url, title = title, spaceId = spaceId, folderId = folderId, kind = kind)
+        }
     }
 
     /**
@@ -812,8 +815,7 @@ object SpacesSyncService {
             AppEvents.emitSnapshotStale()
             return
         }
-        val client = AccountStore.connect(context)
-        deleteTab(client = client, context = context, id = id)
+        AccountStore.withClient(context) { deleteTab(client = it, context = context, id = id) }
     }
 
     suspend fun deleteTab(client: SyncClient, context: Context? = null, id: String) {
@@ -854,8 +856,7 @@ object SpacesSyncService {
             AppEvents.emitSnapshotStale()
             return
         }
-        val client = AccountStore.connect(context)
-        renameTab(client = client, id = id, label = label)
+        AccountStore.withClient(context) { renameTab(client = it, id = id, label = label) }
     }
 
     suspend fun renameTab(client: SyncClient, id: String, label: String) {
@@ -923,8 +924,7 @@ object SpacesSyncService {
             AppEvents.emitSnapshotStale()
             return
         }
-        val client = AccountStore.connect(context)
-        moveTab(client = client, id = id, spaceId = spaceId, folderId = target)
+        AccountStore.withClient(context) { moveTab(client = it, id = id, spaceId = spaceId, folderId = target) }
     }
 
     suspend fun moveTab(client: SyncClient, id: String, spaceId: String, folderId: String?) {
@@ -956,8 +956,7 @@ object SpacesSyncService {
             AppEvents.emitSnapshotStale()
             return
         }
-        val client = AccountStore.connect(context)
-        pinTab(client = client, id = id, spaceId = spaceId)
+        AccountStore.withClient(context) { pinTab(client = it, id = id, spaceId = spaceId) }
     }
 
     suspend fun pinTab(client: SyncClient, id: String, spaceId: String) {
