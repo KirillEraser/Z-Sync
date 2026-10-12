@@ -205,6 +205,8 @@ struct SpacesBrowserView: View {
                         if placement == .bottom {
                             actionBar(scheme: effectiveScheme, placement: placement)
                         }
+
+                        statusLine(scheme: effectiveScheme)
                     }
                 }
             }
@@ -404,6 +406,34 @@ struct SpacesBrowserView: View {
     }
 
     // MARK: States (shown until the first successful sync)
+
+    /// A line at the bottom of the dock, shown only when a delete or a
+    /// refresh over cached spaces failed, so sync problems are visible
+    /// without a banner.
+    @ViewBuilder
+    private func statusLine(scheme: ColorScheme) -> some View {
+        if let deleteError = model.deleteError {
+            Text(deleteError)
+                .font(.system(size: 12, weight: .medium, design: .rounded))
+                .foregroundStyle(Palette.ink(scheme).opacity(0.7))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 20)
+                .padding(.bottom, 6)
+                .accessibilityAddTraits(.updatesFrequently)
+        } else if model.loadError != nil, !model.reloading {
+            Button {
+                Task { await model.reload() }
+            } label: {
+                Text("home.refresh_failed")
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(Palette.ink(scheme).opacity(0.55))
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 6)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+    }
 
     @ViewBuilder
     private func stateArea(scheme: ColorScheme) -> some View {
