@@ -127,6 +127,9 @@ fun SplitRow(
                     onOpenUrl = { url, title ->
                         if (onOpenUrl != null) onOpenUrl(url, title) else openURLExternally(context, url)
                     },
+                    // The cell consumes the press, so it must open the row's
+                    // menu itself or "Unsplit tabs" is unreachable by touch.
+                    onLongPress = { menuOpen = true },
                 )
             }
         }
@@ -159,21 +162,24 @@ fun SplitRow(
 }
 
 /** One equal-width pane inside a split row. Sizes mirror a normal `TabRow`. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SplitCell(
     tab: ZenSpaces.ZenTab,
     modifier: Modifier = Modifier,
     onOpenUrl: (String, String?) -> Unit,
+    onLongPress: () -> Unit,
 ) {
     val source = remember { MutableInteractionSource() }
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
             .pressFeedback(source)
-            .clickable(
+            .combinedClickable(
                 interactionSource = source,
                 indication = null,
                 onClick = { onOpenUrl(tab.url, tab.displayTitle) },
+                onLongClick = onLongPress,
             ),
     ) {
         ZenTabIcon(tab = tab, size = 28.dp)
