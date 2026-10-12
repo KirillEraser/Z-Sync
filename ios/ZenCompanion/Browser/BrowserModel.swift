@@ -413,6 +413,19 @@ final class BrowserModel {
         try? await repository.renameTab(id: id, label: label)
     }
 
+    func moveTab(id: String, toFolder folderId: String?, in spaceId: String) async {
+        // Optimistic: the tab changes place before the conditional write and
+        // the follow-up reload. A failed write self-corrects on the next reload.
+        snapshot = SpacesSyncEdits.moving(id: id, folderId: folderId, in: spaceId, snapshot: snapshot)
+        do {
+            try await repository.moveTab(id: id, toFolder: folderId, in: spaceId)
+        } catch {
+            // Put the tab back where the server has it instead of showing a
+            // move that never happened.
+            await reload()
+        }
+    }
+
     private static func isCancellation(_ error: Error) -> Bool {
         if error is CancellationError { return true }
         if let urlError = error as? URLError, urlError.code == .cancelled { return true }

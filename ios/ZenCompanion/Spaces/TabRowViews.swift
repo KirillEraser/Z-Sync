@@ -6,9 +6,17 @@ struct TabRow: View {
     let tab: ZenTab
     let scheme: ColorScheme
     var deletable: Bool
+    /// Normal (unpinned) tabs never carry a `folderId`, so they rename but do not move.
+    var isNormalTab: Bool = false
+    /// Nil when the tab sits at the space root. Marked in the picker and not written.
+    var currentFolderId: String? = nil
+    /// Space the tab already lives in. Move stays inside this space and reuses
+    /// the share sheet's folder menu. Nil hides the action (normal tabs).
+    var moveSpace: ZenSpace? = nil
     var onOpen: () -> Void = {}
     var onDelete: () async -> Void = {}
     var onRename: (String) async -> Void = { _ in }
+    var onMove: (String?) async -> Void = { _ in }
 
     @State private var deleting = false
     @State private var showingRename = false
@@ -38,12 +46,20 @@ struct TabRow: View {
             } label: {
                 Label(String(localized: "tabs.rename"), systemImage: "pencil")
             }
+            if let moveSpace, offersMove(in: moveSpace) {
+                Menu {
+                    moveDestinations(in: moveSpace)
+                } label: {
+                    Label(String(localized: "tabs.move"), systemImage: "folder")
+                }
+            }
             if deletable {
                 Button(role: .destructive) {
                     Task { await remove() }
                 } label: {
                     Label(String(localized: "tabs.delete"), systemImage: "trash")
                 }
+                .disabled(deleting)
             }
         }
         .alert(String(localized: "tabs.rename_title"), isPresented: $showingRename) {
@@ -54,7 +70,43 @@ struct TabRow: View {
                 Task { await onRename(value) }
             }
         }
+        .accessibilityLabel(Text(tab.displayTitle))
         .accessibilityHint(Text(tab.url))
+    }
+
+    /// Space name first, then folders in sidebar order. A folder that contains
+    /// other folders opens that next level, in the same order as the sidebar.
+    @ViewBuilder
+    private func moveDestinations(in space: ZenSpace) -> some View {
+        let spaceName = space.name.isEmpty ? String(localized: "share.workspace") : space.name
+        let atRoot = currentFolderId?.isEmpty ?? true
+        Button {
+            guard TabMove.shouldWrite(currentFolderId: currentFolderId, selectedFolderId: nil) else { return }
+            Task { await onMove(nil) }
+        } label: {
+            if atRoot {
+                Label(spaceName, systemImage: "checkmark")
+            } else {
+                Text(spaceName)
+            }
+        }
+        MoveFolderDestinations(
+            folders: PinDestinationModel.folders(in: space),
+            currentFolderId: currentFolderId,
+            onMove: onMove
+        )
+    }
+
+    /// Pinned and folder rows that have somewhere else to land. A root tab in a
+    /// space with no folders has only its current place, so the action stays hidden.
+    private func offersMove(in space: ZenSpace) -> Bool {
+        guard TabMove.offersMove(renames: true, isNormalTab: isNormalTab) else { return false }
+        let name = space.name.isEmpty ? String(localized: "share.workspace") : space.name
+        return TabMove.destinations(
+            spaceName: name,
+            folders: PinDestinationModel.folderEntries(in: space),
+            currentFolderId: currentFolderId
+        ).contains { !$0.isCurrent }
     }
 
     private var renameSeed: String {
@@ -67,6 +119,60 @@ struct TabRow: View {
         deleting = true
         defer { deleting = false }
         await onDelete()
+    }
+}
+
+/// One level of the move menu. A folder with children opens the next level,
+/// and its own row is the first item there, so the tab can still land in it.
+private struct MoveFolderDestinations: View {
+    let folders: [ZenFolder]
+    let currentFolderId: String?
+    let onMove: (String?) async -> Void
+
+    var body: some View {
+        ForEach(folders) { folder in
+            let children = folder.subfolders ?? []
+            if children.isEmpty {
+                destinationButton(folder)
+            } else {
+                Menu {
+                    destinationButton(folder)
+                    MoveFolderDestinations(
+                        folders: children,
+                        currentFolderId: currentFolderId,
+                        onMove: onMove
+                    )
+                } label: {
+                    if TabMove.samePlace(currentFolderId: currentFolderId, selectedFolderId: folder.id) {
+                        Label(Self.displayName(folder), systemImage: "checkmark")
+                    } else {
+                        Text(Self.displayName(folder))
+                    }
+                }
+            }
+        }
+    }
+
+    private func destinationButton(_ folder: ZenFolder) -> some View {
+        let current = TabMove.samePlace(currentFolderId: currentFolderId, selectedFolderId: folder.id)
+        return Button {
+            guard TabMove.shouldWrite(
+                currentFolderId: currentFolderId,
+                selectedFolderId: folder.id
+            ) else { return }
+            let folderId = folder.id
+            Task { await onMove(folderId) }
+        } label: {
+            if current {
+                Label(Self.displayName(folder), systemImage: "checkmark")
+            } else {
+                Text(Self.displayName(folder))
+            }
+        }
+    }
+
+    private static func displayName(_ folder: ZenFolder) -> String {
+        folder.name.isEmpty ? String(localized: "tabs.folder") : folder.name
     }
 }
 
@@ -171,5 +277,7 @@ private struct FadeOutTitle: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
     }
 }
+
+
 
 
