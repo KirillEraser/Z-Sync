@@ -59,6 +59,15 @@ class SearchEngineTests {
         assertEquals("https://duckduckgo.com/?q=kotlin+%26+swift+%3D+fast%3F", formatted)
     }
 
+    // The characters iOS had to start escaping: &, +, = and #.
+    @Test
+    fun testFormatQueryEscapesQuerySeparators() {
+        assertEquals(
+            "https://duckduckgo.com/?q=AT%26T+c%2B%2B+a%3Db+%231",
+            SearchEngine.DUCKDUCKGO.formatQuery("AT&T c++ a=b #1"),
+        )
+    }
+
     @Test
     fun testCustomTemplateFormatQuery() {
         val engine = SearchEngine(

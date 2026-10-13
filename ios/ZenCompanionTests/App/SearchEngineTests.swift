@@ -43,6 +43,13 @@ final class SearchEngineTests: XCTestCase {
         )
     }
 
+    func testSearchURLEscapesQuerySeparators() {
+        XCTAssertEqual(
+            SearchEngine.duckDuckGo.searchURL(for: "AT&T c++ a=b #1"),
+            URL(string: "https://duckduckgo.com/?q=AT%26T%20c%2B%2B%20a%3Db%20%231")
+        )
+    }
+
     func testCustomTemplateSearchURL() {
         let engine = SearchEngine(
             id: "kagi", displayName: "Kagi",
