@@ -959,6 +959,102 @@ final class ConflictSafeSyncTests: XCTestCase {
         }
     }
 
+    // MARK: - Half-applied edits and partial retries (SPEC §7.2)
+
+    /// A partial POST outcome on a move is retried once like a 412; the
+    /// re-read sees the already-applied tab record and completes the move.
+    func testPartialPostFailureOnMoveRetriesOnceAndCompletes() async throws {
+        let server = MutableSyncServer()
+        try seed(server, id: "space-1", kind: "space", data: ["uuid": "space-1", "children": ["t1"]])
+        try seed(server, id: "t1", kind: "tab", data: ["tabId": "t1", "url": "https://tab.example/t1", "workspaceUuid": "space-1"])
+        try seed(server, id: "folder-1", kind: "folder", data: ["folderId": "folder-1", "workspaceUuid": "space-1", "children": [String]()])
+        server.forcedFailed = ["folder-1": "server rejected"]
+        var posts = 0
+        server.beforeWrite = { request in
+            guard request.method == "POST" else { return }
+            posts += 1
+            if posts == 2 { server.forcedFailed = [:] }
+        }
+        let client = makeClient(transport: server)
+
+        try await SpacesSyncService.moveTab(client: client, id: "t1", toFolder: "folder-1", in: "space-1")
+
+        XCTAssertEqual(posts, 2)
+        let folder = try XCTUnwrap(server.cleartext(collection: "spaces", id: "folder-1", keys: defaultKeys))
+        XCTAssertEqual((folder["data"] as? [String: Any])?["children"] as? [String], ["t1"])
+    }
+
+    /// The other half-form: the tab and the new parent were applied, a
+    /// removal from the old parent was rejected. The retry repairs the
+    /// leftover listing.
+    func testPartialPostFailureOnMoveCompletesRejectedRemoval() async throws {
+        let server = MutableSyncServer()
+        try seed(server, id: "space-1", kind: "space", data: ["uuid": "space-1", "children": ["t1"]])
+        try seed(server, id: "t1", kind: "tab", data: ["tabId": "t1", "url": "https://tab.example/t1", "workspaceUuid": "space-1"])
+        try seed(server, id: "folder-1", kind: "folder", data: ["folderId": "folder-1", "workspaceUuid": "space-1", "children": [String]()])
+        server.forcedFailed = ["space-1": "server rejected"]
+        var posts = 0
+        server.beforeWrite = { request in
+            guard request.method == "POST" else { return }
+            posts += 1
+            if posts == 2 { server.forcedFailed = [:] }
+        }
+        let client = makeClient(transport: server)
+
+        try await SpacesSyncService.moveTab(client: client, id: "t1", toFolder: "folder-1", in: "space-1")
+
+        XCTAssertEqual(posts, 2)
+        let folder = try XCTUnwrap(server.cleartext(collection: "spaces", id: "folder-1", keys: defaultKeys))
+        XCTAssertEqual((folder["data"] as? [String: Any])?["children"] as? [String], ["t1"])
+        let space = try XCTUnwrap(server.cleartext(collection: "spaces", id: "space-1", keys: defaultKeys))
+        XCTAssertEqual((space["data"] as? [String: Any])?["children"] as? [String], [])
+    }
+
+    /// A partial POST outcome on a pin is retried once like a 412; the
+    /// re-read sees the already-pinned tab and completes the children rewrite.
+    func testPartialPostFailureOnPinRetriesOnceAndCompletes() async throws {
+        let server = MutableSyncServer()
+        try seed(server, id: "space-1", kind: "space", data: ["uuid": "space-1", "children": [String]()])
+        try seed(server, id: "t1", kind: "tab", data: ["tabId": "t1", "url": "https://tab.example/t1", "workspaceUuid": "space-1", "pinned": false])
+        server.forcedFailed = ["space-1": "server rejected"]
+        var posts = 0
+        server.beforeWrite = { request in
+            guard request.method == "POST" else { return }
+            posts += 1
+            if posts == 2 { server.forcedFailed = [:] }
+        }
+        let client = makeClient(transport: server)
+
+        try await SpacesSyncService.pinTab(client: client, id: "t1", in: "space-1")
+
+        XCTAssertEqual(posts, 2)
+        let space = try XCTUnwrap(server.cleartext(collection: "spaces", id: "space-1", keys: defaultKeys))
+        XCTAssertEqual((space["data"] as? [String: Any])?["children"] as? [String], ["t1"])
+        let tab = try XCTUnwrap(server.cleartext(collection: "spaces", id: "t1", keys: defaultKeys))
+        XCTAssertEqual((tab["data"] as? [String: Any])?["pinned"] as? Bool, true)
+    }
+
+    /// A partial POST outcome on a rename is retried once like a 412.
+    func testPartialPostFailureOnRenameRetriesOnceAndCompletes() async throws {
+        let server = MutableSyncServer()
+        try seed(server, id: "space-1", kind: "space", data: ["uuid": "space-1", "children": ["t1"]])
+        try seed(server, id: "t1", kind: "tab", data: ["tabId": "t1", "url": "https://tab.example/t1", "workspaceUuid": "space-1"])
+        server.forcedFailed = ["t1": "server rejected"]
+        var posts = 0
+        server.beforeWrite = { request in
+            guard request.method == "POST" else { return }
+            posts += 1
+            if posts == 2 { server.forcedFailed = [:] }
+        }
+        let client = makeClient(transport: server)
+
+        try await SpacesSyncService.renameTab(client: client, id: "t1", label: "Work")
+
+        XCTAssertEqual(posts, 2)
+        let tab = try XCTUnwrap(server.cleartext(collection: "spaces", id: "t1", keys: defaultKeys))
+        XCTAssertEqual((tab["data"] as? [String: Any])?["staticLabel"] as? String, "Work")
+    }
+
     // MARK: - Legacy switch OFF
 
     /// (9) With the switch OFF both mutations keep today's exact sequential

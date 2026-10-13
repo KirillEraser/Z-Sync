@@ -1002,6 +1002,106 @@ class ConflictSafeSyncTests {
         }
     }
 
+    // MARK: Half-applied edits and partial retries (SPEC §7.2)
+
+    @Test
+    fun partialPostFailureOnMoveRetriesOnceAndCompletes() {
+        val server = ConflictServer(keys, syncKeys)
+        server.seedSpace("space-1", children = listOf("t1"))
+        server.seedTab("t1", "space-1")
+        server.seedFolder("folder-1", workspaceUuid = "space-1", children = emptyList())
+        server.forcedFailed = mapOf("folder-1" to "server rejected")
+        var posts = 0
+        server.onBeforeRequest = { request ->
+            if (request.method == "POST") {
+                posts++
+                if (posts == 2) server.forcedFailed = emptyMap()
+            }
+        }
+
+        runBlocking { SpacesSyncService.moveTab(client(server), id = "t1", spaceId = "space-1", folderId = "folder-1") }
+
+        assertEquals(2, posts)
+        assertEquals(listOf("t1"), server.children("folder-1"))
+        assertEquals(emptyList<String>(), server.children("space-1"))
+    }
+
+    @Test
+    fun partialPostFailureOnMoveCompletesRejectedRemoval() {
+        val server = ConflictServer(keys, syncKeys)
+        server.seedSpace("space-1", children = listOf("t1"))
+        server.seedTab("t1", "space-1")
+        server.seedFolder("folder-1", workspaceUuid = "space-1", children = emptyList())
+        server.forcedFailed = mapOf("space-1" to "server rejected")
+        var posts = 0
+        server.onBeforeRequest = { request ->
+            if (request.method == "POST") {
+                posts++
+                if (posts == 2) server.forcedFailed = emptyMap()
+            }
+        }
+
+        runBlocking { SpacesSyncService.moveTab(client(server), id = "t1", spaceId = "space-1", folderId = "folder-1") }
+
+        assertEquals(2, posts)
+        assertEquals(listOf("t1"), server.children("folder-1"))
+        assertEquals(emptyList<String>(), server.children("space-1"))
+    }
+
+    @Test
+    fun partialPostFailureOnPinRetriesOnceAndCompletes() {
+        val server = ConflictServer(keys, syncKeys)
+        server.seedSpace("space-1", children = emptyList())
+        server.putRecord(
+            "t1",
+            JSONObject()
+                .put("id", "t1")
+                .put("kind", "tab")
+                .put(
+                    "data",
+                    JSONObject()
+                        .put("tabId", "t1")
+                        .put("url", "https://tab.example/t1")
+                        .put("workspaceUuid", "space-1")
+                        .put("pinned", false),
+                ),
+        )
+        server.forcedFailed = mapOf("space-1" to "server rejected")
+        var posts = 0
+        server.onBeforeRequest = { request ->
+            if (request.method == "POST") {
+                posts++
+                if (posts == 2) server.forcedFailed = emptyMap()
+            }
+        }
+
+        runBlocking { SpacesSyncService.pinTab(client(server), id = "t1", spaceId = "space-1") }
+
+        assertEquals(2, posts)
+        assertEquals(listOf("t1"), server.children("space-1"))
+        assertEquals(true, server.cleartext("t1")!!.getJSONObject("data").getBoolean("pinned"))
+    }
+
+    @Test
+    fun partialPostFailureOnRenameRetriesOnceAndCompletes() {
+        val server = ConflictServer(keys, syncKeys)
+        server.seedSpace("space-1", children = listOf("t1"))
+        server.seedTab("t1", "space-1")
+        server.forcedFailed = mapOf("t1" to "server rejected")
+        var posts = 0
+        server.onBeforeRequest = { request ->
+            if (request.method == "POST") {
+                posts++
+                if (posts == 2) server.forcedFailed = emptyMap()
+            }
+        }
+
+        runBlocking { SpacesSyncService.renameTab(client(server), id = "t1", label = "Work") }
+
+        assertEquals(2, posts)
+        assertEquals("Work", server.cleartext("t1")!!.getJSONObject("data").getString("staticLabel"))
+    }
+
     // MARK: Legacy switch-off path
 
     @Test
