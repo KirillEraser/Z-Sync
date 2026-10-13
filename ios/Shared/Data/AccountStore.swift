@@ -146,8 +146,11 @@ enum AccountStore {
 
     /// Runs `operation` with a connected client. When the storage server
     /// rejects the cached token-server credentials (401), they are dropped and
-    /// the operation runs once more with fresh ones. A 401 rejects the request
-    /// before anything is written, so the retry is safe for writes too.
+    /// the operation runs once more with fresh ones. A 401 rejects its own
+    /// request before storing any record in it, so re-running one request is
+    /// safe. The legacy multi-PUT paths (safe-sync off) are the exception: a
+    /// 401 on a later PUT leaves the earlier ones applied, and the retry
+    /// cannot tell that apart from a cold call.
     static func withClient<T>(_ operation: (SyncClient) async throws -> T) async throws -> T {
         do {
             return try await operation(try await connect())
