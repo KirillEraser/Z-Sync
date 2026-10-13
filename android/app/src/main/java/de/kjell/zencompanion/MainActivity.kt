@@ -8,6 +8,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -18,6 +19,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import de.kjell.zencompanion.review.PlayInAppReview
 import de.kjell.zencompanion.sync.ZenSpaces
@@ -146,6 +150,32 @@ private fun SpacesBrowserRoot(viewModel: AppViewModel) {
         }
     }
 
+    // A new observer replays ON_START, so this also covers launch. Stops for a
+    // configuration change (dark mode, window resize) are not a trip away.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_START -> viewModel.appCameToForeground()
+                Lifecycle.Event.ON_STOP ->
+                    if ((context as? Activity)?.isChangingConfigurations != true) {
+                        viewModel.appWentToBackground()
+                    }
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    val searchOnOpenPending by viewModel.searchOnOpenPending.collectAsState()
+    LaunchedEffect(searchOnOpenPending) {
+        if (!searchOnOpenPending) return@LaunchedEffect
+        // Leave an open browser, settings or activity sheet where the user left it.
+        if (activeBrowserLaunch == null && !showSettings && !showActivity) openBrowser(null, null)
+        viewModel.consumeSearchOnOpen()
+    }
+
     Box(Modifier.fillMaxSize()) {
         SpacesBrowserScreen(
             isDemo = account.isDemo,
@@ -204,6 +234,7 @@ private fun SpacesBrowserRoot(viewModel: AppViewModel) {
             onSetEssentialsGrouping = { viewModel.setEssentialsGrouping(it) },
             onSetSaveKind = { viewModel.setSaveKind(it) },
             onSetToolbarPlacement = { viewModel.setToolbarPlacement(it) },
+            onSetOpenIntoSearch = { viewModel.setOpenIntoSearch(it) },
             onSignOut = {
                 showSettings = false
                 // Clears encrypted store + sync cache + wipes WebView data.

@@ -583,6 +583,16 @@
         }
       }
     },
+    "settings.open_into_search" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open into search"
+          }
+        }
+      }
+    },
     "settings.save_kind" : {
       "localizations" : {
         "en" : {

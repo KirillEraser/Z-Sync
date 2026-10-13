@@ -43,6 +43,7 @@ object BrowserSettings {
     const val KEY_ESSENTIALS_GROUPING = "essentials_grouping"
     const val KEY_SAVE_KIND = "save_tab_kind"
     const val KEY_TOOLBAR_PLACEMENT = "toolbar_placement"
+    const val KEY_OPEN_INTO_SEARCH = "open_into_search"
 
     fun get(context: Context): Boolean =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -92,6 +93,18 @@ object BrowserSettings {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
             .putString(KEY_TOOLBAR_PLACEMENT, placement.storageValue)
+            .apply()
+    }
+
+    /** Whether the app opens into a new search tab; off when never chosen. */
+    fun getOpenIntoSearch(context: Context): Boolean =
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(KEY_OPEN_INTO_SEARCH, false)
+
+    fun setOpenIntoSearch(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_OPEN_INTO_SEARCH, enabled)
             .apply()
     }
 }
