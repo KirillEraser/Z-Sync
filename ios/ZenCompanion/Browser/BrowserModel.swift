@@ -4,8 +4,9 @@ import SwiftUI
 import os
 
 /// App-shell state owner for `SpacesBrowserView`: snapshot, pager indices,
-/// load lifecycle and the share/setup tips. The view keeps only navigation
-/// identity (`ActiveSheet`) and the notification/scenePhase observers.
+/// load lifecycle and the share/setup tips. The view keeps navigation
+/// identity (`ActiveSheet`), whether that browser was opened full screen,
+/// and the notification/scenePhase observers.
 @MainActor
 @Observable
 final class BrowserModel {
