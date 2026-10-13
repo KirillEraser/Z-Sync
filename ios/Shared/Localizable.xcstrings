@@ -115,6 +115,17 @@
         }
       }
     },
+    "browser.pin_failed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't save this tab."
+          }
+        }
+      }
+    },
     "browser.pin_no_space" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -319,6 +330,17 @@
         }
       }
     },
+    "error.incomplete_read" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Z-Sync couldn't read all of your Zen data, so it didn't change anything. Pull to refresh and try again."
+          }
+        }
+      }
+    },
     "error.interrupted" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -374,6 +396,17 @@
         }
       }
     },
+    "error.target_missing" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This space isn't in Zen anymore. Pull to refresh and pick another one."
+          }
+        }
+      }
+    },
     "error.totp" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -381,6 +414,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "A confirmation code is required."
+          }
+        }
+      }
+    },
+    "error.unsupported_sync_version" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zen changed how it syncs spaces. Update Z-Sync before making changes from your phone."
           }
         }
       }
@@ -605,6 +649,16 @@
         }
       }
     },
+    "settings.open_into_search" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open into search"
+          }
+        }
+      }
+    },
     "settings.save_kind" : {
       "localizations" : {
         "en" : {
@@ -631,7 +685,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Needs \"Include unpinned tabs\" in your desktop browser's Settings → Sync."
+            "value" : "Turn on “Include unpinned tabs” in Zen’s Settings → Sync to pin as normal tabs."
           }
         }
       }
@@ -738,7 +792,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Saved as pinned tab — normal tabs are off on your desktop."
+            "value" : "Saved as pinned tab — turn on “Include unpinned tabs” in Zen’s Settings → Sync to pin as normal tabs."
           }
         }
       }
@@ -1144,7 +1198,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Share a link from Safari or any app and pick a space — it lands in your pinned tabs."
+            "value" : "Share a link from any app and pick a space — it lands in your pinned tabs."
           }
         }
       }

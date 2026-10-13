@@ -22,6 +22,7 @@ import androidx.compose.material.icons.outlined.ArrowDropDown
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Keyboard
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.SwapVert
@@ -63,6 +64,7 @@ internal fun SettingsPreferencesSection(
     onSetAlwaysOpenExternally: (Boolean) -> Unit,
     onSetSaveKind: (SaveKind) -> Unit,
     onSetToolbarPlacement: (ToolbarPlacement) -> Unit,
+    onSetOpenIntoSearch: (Boolean) -> Unit,
     onOpenAdvanced: () -> Unit,
 ) {
     // Preferences Section
@@ -198,6 +200,37 @@ internal fun SettingsPreferencesSection(
                 androidx.compose.material3.Switch(
                     checked = alwaysOpenExternally,
                     onCheckedChange = { onSetAlwaysOpenExternally(it) },
+                )
+            }
+
+            HorizontalDivider(
+                modifier = Modifier.padding(horizontal = 16.dp),
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onSetOpenIntoSearch(!preferences.openIntoSearch) }
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Keyboard,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(22.dp),
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = stringResource(R.string.settings_open_into_search),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f),
+                )
+                androidx.compose.material3.Switch(
+                    checked = preferences.openIntoSearch,
+                    onCheckedChange = { onSetOpenIntoSearch(it) },
                 )
             }
 

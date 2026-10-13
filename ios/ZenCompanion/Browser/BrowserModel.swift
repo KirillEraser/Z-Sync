@@ -4,8 +4,9 @@ import SwiftUI
 import os
 
 /// App-shell state owner for `SpacesBrowserView`: snapshot, pager indices,
-/// load lifecycle and the share/setup tips. The view keeps only navigation
-/// identity (`ActiveSheet`) and the notification/scenePhase observers.
+/// load lifecycle and the share/setup tips. The view keeps navigation
+/// identity (`ActiveSheet`), whether that browser was opened full screen,
+/// and the notification/scenePhase observers.
 @MainActor
 @Observable
 final class BrowserModel {
@@ -36,6 +37,9 @@ final class BrowserModel {
     /// Flipped once when the in-app review dialog should appear. The view
     /// consumes this via StoreKit's `requestReview` environment action.
     var reviewPromptPending = false
+    /// Flipped when the app opens (launch, or back from the background) with
+    /// "Open into search" on. The view consumes it by opening a new tab.
+    var searchOnOpenPending = false
 
     private let isDemo: Bool
     private let repository: SpacesRepository
@@ -48,6 +52,9 @@ final class BrowserModel {
     /// True after the first-look / next-open wait finished. Share-tip dismiss can
     /// then ask without skipping the wait.
     private var reviewWaitElapsed = false
+    /// True from launch and after each trip to the background, until the next
+    /// open has been considered for "Open into search".
+    private var searchOnOpenArmed = true
 
     init(
         account: AccountSnapshot,
@@ -208,7 +215,11 @@ final class BrowserModel {
             favicons.prefetch(from: cached)
             considerReviewPrompt()
         }
+        considerSearchOnOpen()
         await reload()
+        // A first launch without cached spaces shows the spaces once they
+        // arrive instead of covering them with a search sheet.
+        searchOnOpenArmed = false
     }
 
     /// Manual pull-to-refresh. Unlike a background reload this must always hit
@@ -341,11 +352,32 @@ final class BrowserModel {
     /// Returning to the foreground (e.g. after sharing via the share
     /// extension) refreshes what's on screen against the server.
     func sceneBecameActive() async {
+        considerSearchOnOpen()
         if snapshot.spaces.isEmpty {
             await reload()
         } else {
             await reloadQuietly()
         }
+    }
+
+    func sceneEnteredBackground() {
+        searchOnOpenArmed = true
+    }
+
+    // MARK: - Open into search
+
+    /// Asks the view for a new tab once per open, when the setting is on and
+    /// there is a space to pin into. Without spaces yet (scenePhase can fire
+    /// before the cache loads) the open stays armed for the next call.
+    func considerSearchOnOpen() {
+        guard searchOnOpenArmed, !snapshot.spaces.isEmpty else { return }
+        searchOnOpenArmed = false
+        guard preferences.bool(PreferenceKeys.openIntoSearch, scope: .standard) else { return }
+        searchOnOpenPending = true
+    }
+
+    func consumeSearchOnOpen() {
+        searchOnOpenPending = false
     }
 
     // MARK: - Tips

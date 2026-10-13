@@ -1,8 +1,14 @@
 package de.kjell.zencompanion
 
+import android.webkit.WebView
 import de.kjell.zencompanion.ui.screens.BrowserLinkAction
 import de.kjell.zencompanion.ui.screens.browserLinkAction
+import de.kjell.zencompanion.ui.screens.isWebScheme
+import de.kjell.zencompanion.ui.screens.sameTabUrl
+import de.kjell.zencompanion.ui.screens.tappedLinkUrl
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BrowserLinkPolicyTests {
@@ -15,11 +21,13 @@ class BrowserLinkPolicyTests {
         scheme: String?,
         isRedirect: Boolean = false,
         hasGesture: Boolean = true,
+        isMainFrame: Boolean = true,
         resolvedPackage: String? = youtubePackage,
     ): BrowserLinkAction = browserLinkAction(
         scheme = scheme,
         isRedirect = isRedirect,
         hasGesture = hasGesture,
+        isMainFrame = isMainFrame,
         resolvedPackage = resolvedPackage,
         browserPackages = browsers,
         ownPackage = ownPackage,
@@ -72,23 +80,85 @@ class BrowserLinkPolicyTests {
     }
 
     @Test
-    fun nonWebSchemesAlwaysOpenExternally() {
+    fun nonWebSchemesOpenExternallyOnlyAfterATap() {
+        for (scheme in listOf("mailto", "tel", "intent", "youtube")) {
+            assertEquals(
+                scheme,
+                BrowserLinkAction.OPEN_EXTERNALLY,
+                action(scheme, hasGesture = true, resolvedPackage = null),
+            )
+            assertEquals(
+                scheme,
+                BrowserLinkAction.BLOCK,
+                action(scheme, hasGesture = false, resolvedPackage = null),
+            )
+        }
+    }
+
+    /**
+     * A tap inside an iframe must not leave the app; only a tap in the main
+     * frame may. Mirrors iOS `BrowserNavigationPolicy.opensExternally`.
+     */
+    @Test
+    fun appSchemesOpenOnlyFromAMainFrameTap() {
+        for (scheme in listOf("mailto", "tel", "intent", "youtube")) {
+            assertEquals(
+                scheme,
+                BrowserLinkAction.OPEN_EXTERNALLY,
+                action(scheme, hasGesture = true, isMainFrame = true, resolvedPackage = null),
+            )
+            assertEquals(
+                scheme,
+                BrowserLinkAction.BLOCK,
+                action(scheme, hasGesture = true, isMainFrame = false, resolvedPackage = null),
+            )
+        }
+    }
+
+    @Test
+    fun webSchemeCheckMatchesThePolicy() {
+        assertTrue(isWebScheme("HTTPS"))
+        assertTrue(isWebScheme(null))
+        assertFalse(isWebScheme("mailto"))
+        assertFalse(isWebScheme("intent"))
+    }
+
+    @Test
+    fun newWindowKeepsHttpAndHttpsInTheSameTab() {
         assertEquals(
-            BrowserLinkAction.OPEN_EXTERNALLY,
-            action("mailto", hasGesture = false, resolvedPackage = null),
+            "http://www.org.chemie.uni-muenchen.de/ac/kornath/flusssaeure-hf/",
+            sameTabUrl("http://www.org.chemie.uni-muenchen.de/ac/kornath/flusssaeure-hf/"),
         )
         assertEquals(
-            BrowserLinkAction.OPEN_EXTERNALLY,
-            action("tel", hasGesture = false, resolvedPackage = null),
+            "https://www.google.com/goto?url=abc",
+            sameTabUrl("https://www.google.com/goto?url=abc"),
         )
+    }
+
+    @Test
+    fun blankNewWindowDoesNotReplaceThePage() {
+        assertEquals(null, sameTabUrl("about:blank"))
+        assertEquals(null, sameTabUrl("javascript:void(0)"))
+        assertEquals(null, sameTabUrl(null))
+        assertEquals(null, sameTabUrl("  "))
+    }
+
+    @Test
+    fun tappedTextLinkLoadsInTheSameTab() {
         assertEquals(
-            BrowserLinkAction.OPEN_EXTERNALLY,
-            action("intent", hasGesture = false, resolvedPackage = null),
+            "https://example.com/next",
+            tappedLinkUrl(WebView.HitTestResult.SRC_ANCHOR_TYPE, "https://example.com/next"),
         )
+    }
+
+    @Test
+    fun tappedImageLinkLeavesTheAddressToThePopup() {
+        // For an image link the hit test reports the image, not where the link goes.
         assertEquals(
-            BrowserLinkAction.OPEN_EXTERNALLY,
-            action("youtube", hasGesture = false, resolvedPackage = null),
+            null,
+            tappedLinkUrl(WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE, "https://example.com/picture.png"),
         )
+        assertEquals(null, tappedLinkUrl(WebView.HitTestResult.UNKNOWN_TYPE, null))
     }
 
     @Test

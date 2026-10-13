@@ -159,6 +159,26 @@ struct SettingsSheet: View {
                             .tint(Palette.coral(scheme))
                             .padding(.horizontal, 16)
                             .frame(minHeight: 54)
+
+                            Rectangle()
+                                .fill(Palette.ink(scheme).opacity(0.15))
+                                .frame(height: 0.5)
+                                .padding(.leading, 44)
+
+                            Toggle(isOn: $model.openIntoSearch) {
+                                Label {
+                                    Text("settings.open_into_search")
+                                        .font(.system(size: 16, weight: .medium, design: .rounded))
+                                } icon: {
+                                    Image(systemName: "keyboard")
+                                        .font(.system(size: 15, weight: .semibold))
+                                        .foregroundStyle(Palette.ink(scheme).opacity(0.6))
+                                }
+                                .foregroundStyle(Palette.ink(scheme))
+                            }
+                            .tint(Palette.coral(scheme))
+                            .padding(.horizontal, 16)
+                            .frame(minHeight: 54)
                         }
                         .liftCard(scheme)
 

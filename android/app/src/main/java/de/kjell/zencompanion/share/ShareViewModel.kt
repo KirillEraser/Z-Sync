@@ -17,6 +17,7 @@ import de.kjell.zencompanion.util.FriendlyError
 import de.kjell.zencompanion.util.PageTitle
 import de.kjell.zencompanion.util.fetchRemotePageTitle
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,6 +25,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Everything the share flow needs from the outside world: session check,
@@ -185,7 +187,16 @@ class ShareViewModel(
     suspend fun refreshSpaces() {
         try {
             val fresh = repository.refresh()
-            if (fresh.spaces.isEmpty()) return
+            if (fresh.spaces.isEmpty()) {
+                // Nothing cached and nothing synced: say so instead of
+                // spinning forever.
+                if (_state.value.spaces.isEmpty()) {
+                    _state.update {
+                        it.copy(errorText = repository.noSpacesErrorText(), phase = SharePhase.failed)
+                    }
+                }
+                return
+            }
             val current = _state.value
             val currentId = current.destination?.spaceId
             val destination = if (currentId == null || fresh.spaces.none { it.id == currentId }) {
@@ -210,7 +221,18 @@ class ShareViewModel(
                 it.copy(
                     spaces = fresh.spaces,
                     destination = destination,
-                    phase = if (it.phase != SharePhase.saved) SharePhase.pick else it.phase,
+                    // A refresh that lands mid-save must not re-enable the
+                    // button, and one that lands after a failed write must
+                    // not hide the error.
+                    phase = if (
+                        it.phase == SharePhase.saved ||
+                        it.phase == SharePhase.saving ||
+                        it.phase == SharePhase.failed
+                    ) {
+                        it.phase
+                    } else {
+                        SharePhase.pick
+                    },
                 )
             }
         } catch (e: Exception) {
@@ -240,6 +262,7 @@ class ShareViewModel(
     /** Port of `save()` — saved state, then auto-close after 480ms. */
     private suspend fun performSave() {
         val current = _state.value
+        if (current.phase == SharePhase.saving || current.phase == SharePhase.saved) return
         val currentUrl = current.url ?: return
         // No spaces to attach the pin to: refuse rather than write an
         // unattached record.
@@ -257,13 +280,16 @@ class ShareViewModel(
         resolveJob?.join()
         val title = headlineTitle(_state.value.pageTitle, currentUrl)
         try {
-            val outcome = repository.addTab(
-                url = currentUrl,
-                title = title,
-                spaceId = targetSpace.id,
-                folderId = if (kind == SaveKind.NORMAL) null else target.folderId,
-                kind = kind,
-            )
+            // Leaving the sheet mid-save must not abort a write halfway.
+            val outcome = withContext(NonCancellable) {
+                repository.addTab(
+                    url = currentUrl,
+                    title = title,
+                    spaceId = targetSpace.id,
+                    folderId = if (kind == SaveKind.NORMAL) null else target.folderId,
+                    kind = kind,
+                )
+            }
             repository.setLastSpaceId(targetSpace.id)
             _state.update {
                 it.copy(

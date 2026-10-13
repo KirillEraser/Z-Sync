@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.net.Uri
+import android.os.Message
 import android.view.ViewGroup
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -14,6 +15,8 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.TextFieldValue
@@ -35,6 +38,11 @@ internal fun MiniBrowserWebView(
     onTitleChange: (String) -> Unit,
     onProgressChange: (Float) -> Unit,
 ) {
+    // The factory runs once; read the focus through state so later page
+    // loads see the current value instead of the one from creation time.
+    val addressFocused by rememberUpdatedState(isAddressFocused)
+    val textInputChange by rememberUpdatedState(onTextInputChange)
+
     // Native Android WebView
     AndroidView(
         factory = { ctx ->
@@ -53,7 +61,10 @@ internal fun MiniBrowserWebView(
                     setSupportZoom(true)
                     builtInZoomControls = true
                     displayZoomControls = false
-                    mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+                    mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                    // target=_blank and window.open do nothing unless this is on.
+                    setSupportMultipleWindows(true)
+                    javaScriptCanOpenWindowsAutomatically = true
                 }
                 webViewClient = object : WebViewClient() {
                     override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
@@ -70,11 +81,7 @@ internal fun MiniBrowserWebView(
                         onLoadingChange(false)
                         url?.let {
                             onCurrentUrlChange(it)
-                            if (!isAddressFocused) {
-                                val host = runCatching { Uri.parse(it).host?.removePrefix("www.") }.getOrNull()
-                                val display = if (!host.isNullOrEmpty()) host else it
-                                onTextInputChange(TextFieldValue(text = display))
-                            }
+                            if (!addressFocused) textInputChange(TextFieldValue(text = addressDisplay(it)))
                         }
                         view?.title?.let { onTitleChange(it) }
                         onCanGoBackChange(view?.canGoBack() == true)
@@ -100,6 +107,16 @@ internal fun MiniBrowserWebView(
                         }
                     }
 
+                    // Single-page apps change the URL without a page load.
+                    override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
+                        super.doUpdateVisitedHistory(view, url, isReload)
+                        if (url == null) return
+                        onCurrentUrlChange(url)
+                        if (!addressFocused) textInputChange(TextFieldValue(text = addressDisplay(url)))
+                        onCanGoBackChange(view?.canGoBack() == true)
+                        onCanGoForwardChange(view?.canGoForward() == true)
+                    }
+
                     override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                         if (view == null || request == null) return false
                         val context = view.context
@@ -107,15 +124,26 @@ internal fun MiniBrowserWebView(
                             scheme = request.url.scheme,
                             isRedirect = request.isRedirect,
                             hasGesture = request.hasGesture(),
+                            isMainFrame = request.isForMainFrame,
                             resolvedPackage = resolveHandlerPackage(context, request.url),
                             browserPackages = browserPackages(context),
                             ownPackage = context.packageName,
                         )
-                        if (action == BrowserLinkAction.OPEN_EXTERNALLY) {
-                            return openURLExternally(context, request.url)
+                        return when (action) {
+                            BrowserLinkAction.OPEN_EXTERNALLY -> {
+                                openURLExternally(context, request.url)
+                                true
+                            }
+                            BrowserLinkAction.BLOCK -> true
+                            BrowserLinkAction.LOAD_IN_WEBVIEW -> false
                         }
-                        return false
                     }
+                }
+                // The WebView has no download UI; hand web files to the system,
+                // which opens them in the default browser's downloader. The page
+                // controls this URL, so only http(s) leaves the app.
+                setDownloadListener { url, _, _, _, _ ->
+                    webUrlOrNull(url)?.let { openURLExternally(ctx, it) }
                 }
                 webChromeClient = object : WebChromeClient() {
                     override fun onProgressChanged(view: WebView?, newProgress: Int) {
@@ -125,17 +153,77 @@ internal fun MiniBrowserWebView(
                     override fun onReceivedTitle(view: WebView?, title: String?) {
                         title?.let { onTitleChange(it) }
                     }
+
+                    override fun onCreateWindow(
+                        view: WebView,
+                        isDialog: Boolean,
+                        isUserGesture: Boolean,
+                        resultMsg: Message,
+                    ): Boolean {
+                        // Only a tap may replace the page. Windows a page opens on its own are dropped.
+                        if (!isUserGesture) return false
+                        val hit = view.hitTestResult
+                        val destination = tappedLinkUrl(hit.type, hit.extra)
+                        if (destination != null) {
+                            view.loadUrl(destination)
+                            return false
+                        }
+                        val transport = resultMsg.obj as? WebView.WebViewTransport ?: return false
+                        val popup = WebView(view.context)
+                        popup.settings.javaScriptEnabled = true
+                        popup.webViewClient = object : WebViewClient() {
+                            override fun shouldOverrideUrlLoading(
+                                popupView: WebView,
+                                request: WebResourceRequest,
+                            ): Boolean {
+                                val next = sameTabUrl(request.url?.toString()) ?: return false
+                                view.loadUrl(next)
+                                popupView.post { popupView.destroy() }
+                                return true
+                            }
+                        }
+                        transport.webView = popup
+                        resultMsg.sendToTarget()
+                        return true
+                    }
                 }
 
                 val loadTarget = formatBrowserInput(initialUrl ?: "")
                 if (loadTarget.isNotEmpty()) {
-                    loadUrl(loadTarget)
+                    if (isWebScheme(Uri.parse(loadTarget).scheme)) {
+                        loadUrl(loadTarget)
+                    } else {
+                        openURLExternally(ctx, loadTarget)
+                    }
                 }
                 onWebViewCreated(this)
             }
         },
         modifier = Modifier.fillMaxSize(),
+        // Stop audio, video and timers when the browser closes.
+        onRelease = { web ->
+            web.stopLoading()
+            web.destroy()
+        },
     )
+}
+
+private fun addressDisplay(url: String): String {
+    val host = runCatching { Uri.parse(url).host?.removePrefix("www.") }.getOrNull()
+    return if (!host.isNullOrEmpty()) host else url
+}
+
+/**
+ * A download address from the page, or null when it is not http(s).
+ * Only web addresses leave the app, so a page cannot push `intent://`,
+ * `javascript:` or any other scheme into an implicit `ACTION_VIEW`.
+ */
+private fun webUrlOrNull(raw: String?): String? {
+    if (raw.isNullOrEmpty()) return null
+    return when (Uri.parse(raw).scheme?.lowercase()) {
+        "http", "https" -> raw
+        else -> null
+    }
 }
 
 @Suppress("DEPRECATION")

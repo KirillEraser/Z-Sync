@@ -21,9 +21,11 @@
         </intent>
     </queries>
 
+    <!-- network_security_config: Google results 302 from https://www.google.com/goto to http hosts. -->
     <application
         android:name=".ZenCompanionApp"
         android:allowBackup="false"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"

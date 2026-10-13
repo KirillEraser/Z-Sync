@@ -395,6 +395,71 @@ final class BrowserModelTests: XCTestCase {
         XCTAssertFalse(prefs.hasObject(PreferenceKeys.toolbarPlacement, scope: .standard))
     }
 
+    // MARK: - Open into search
+
+    private func searchPreferences(enabled: Bool = true) -> FakePreferences {
+        let prefs = FakePreferences()
+        prefs.setBool(enabled, PreferenceKeys.openIntoSearch, scope: .standard)
+        return prefs
+    }
+
+    func testLaunchWithCachedSpacesOpensSearchWhenEnabled() async {
+        let repo = FakeSpacesRepository()
+        repo.cached = snapshot(["a"])
+        repo.refreshResult = .success(snapshot(["a"]))
+        let model = makeModel(repo, preferences: searchPreferences())
+
+        await model.initialLoad()
+
+        XCTAssertTrue(model.searchOnOpenPending)
+    }
+
+    func testLaunchStaysOnSpacesWhenSettingIsOff() async {
+        let repo = FakeSpacesRepository()
+        repo.cached = snapshot(["a"])
+        repo.refreshResult = .success(snapshot(["a"]))
+        let model = makeModel(repo, preferences: searchPreferences(enabled: false))
+
+        await model.initialLoad()
+        model.sceneEnteredBackground()
+        await model.sceneBecameActive()
+
+        XCTAssertFalse(model.searchOnOpenPending)
+    }
+
+    func testFirstLaunchWithoutCacheShowsSpacesThenSearchesOnNextOpen() async {
+        let repo = FakeSpacesRepository()
+        repo.refreshResult = .success(snapshot(["a"]))
+        let model = makeModel(repo, preferences: searchPreferences())
+
+        await model.initialLoad()
+        XCTAssertFalse(model.searchOnOpenPending)
+
+        // Control Center or a system alert: active again without backgrounding.
+        await model.sceneBecameActive()
+        XCTAssertFalse(model.searchOnOpenPending)
+
+        model.sceneEnteredBackground()
+        await model.sceneBecameActive()
+        XCTAssertTrue(model.searchOnOpenPending)
+    }
+
+    func testSearchOpensOncePerTripToTheForeground() async {
+        let repo = FakeSpacesRepository()
+        repo.cached = snapshot(["a"])
+        repo.refreshResult = .success(snapshot(["a"]))
+        let model = makeModel(repo, preferences: searchPreferences())
+
+        // scenePhase can report active before the cached spaces load.
+        await model.sceneBecameActive()
+        await model.initialLoad()
+        XCTAssertTrue(model.searchOnOpenPending)
+        model.consumeSearchOnOpen()
+
+        await model.sceneBecameActive()
+        XCTAssertFalse(model.searchOnOpenPending)
+    }
+
     // MARK: - Rename
 
     func testRenameTabUpdatesSnapshotBeforeWriteCompletes() async {

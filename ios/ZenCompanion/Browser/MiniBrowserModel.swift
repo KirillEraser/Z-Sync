@@ -28,6 +28,9 @@ final class MiniBrowserModel {
     var showPinBanner = false
     var pinnedDestination = PinDestination(spaceId: "")
     var hasPendingPinSave = false
+    /// The page the user pinned, captured when the banner opened, so a later
+    /// navigation can't swap in another page before the save commits.
+    private var pendingPin: (url: URL, title: String)?
     /// How the pending save will be written (pinned vs normal). Captured when
     /// the banner is triggered and kept honest against the capability.
     private(set) var pinSaveKind: SaveKind = .pinned
@@ -110,6 +113,12 @@ final class MiniBrowserModel {
     }
 
     func load(url: URL) {
+        // A typed or synced mailto:/tel: is an explicit request to leave the
+        // browser; the page navigation policy only lets taps through.
+        guard BrowserNavigationPolicy.loadsInWebView(url) else {
+            urlOpener.open(url)
+            return
+        }
         webView?.load(URLRequest(url: url))
     }
 
@@ -166,6 +175,12 @@ final class MiniBrowserModel {
             if !isAddressFocused {
                 addressText = BrowserInput.displayText(for: url)
             }
+            // Leaving the pinned page saves it now instead of letting the
+            // banner timer save whatever page is showing later.
+            if hasPendingPinSave, let pinned = pendingPin?.url, !PageTitle.sameDocument(pinned, url) {
+                pinBannerDismissTask?.cancel()
+                commitPendingPinSave()
+            }
             showPinBanner = false
         }
     }
@@ -185,7 +200,7 @@ final class MiniBrowserModel {
     // MARK: - Pin save state machine
 
     func triggerPinBanner(spaces: [ZenSpace], fallbackSpace: ZenSpace) {
-        guard effectiveURL != nil else { return }
+        guard let url = effectiveURL else { return }
         guard !spaces.isEmpty else {
             // There is no attached destination, so refuse instead of writing
             // to an unattached workspace id (fallbackSpace is not in sync).
@@ -209,6 +224,7 @@ final class MiniBrowserModel {
             pinnedDestination = PinDestination(spaceId: pinnedDestination.spaceId)
         }
         hasPendingPinSave = true
+        pendingPin = (url: url, title: pageTitle)
 
         haptics.pinSucceeded()
 
@@ -224,6 +240,7 @@ final class MiniBrowserModel {
     /// the same bottom-toast language as the pin banner.
     private func refusePinWithoutSpaces() {
         hasPendingPinSave = false
+        pendingPin = nil
         withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
             showPinBanner = false
         }
@@ -267,29 +284,38 @@ final class MiniBrowserModel {
 
     func commitPendingPinSave() {
         guard hasPendingPinSave,
-              let url = effectiveURL else {
+              let pin = pendingPin ?? effectiveURL.map({ (url: $0, title: pageTitle) })
+        else {
             return
         }
         hasPendingPinSave = false
+        pendingPin = nil
+        // Still on the pinned page: the live title, or one that loaded after
+        // the tap, wins over the one captured when the banner opened.
+        let stillOnPage = PageTitle.sameDocument(pin.url, effectiveURL)
+        let fallbackTitle = stillOnPage && !pageTitle.isEmpty ? pageTitle : pin.title
         let target = pinnedDestination
         let kind = pinSaveKind
-        let fallbackTitle = pageTitle
 
         pinSaveTask = Task(priority: .userInitiated) {
             // document.title is the browser tab name. WebKit's `title` is often
             // still the URL when the pin is saved.
-            let live = await liveDocumentTitle(for: url)
-            let titleToSave = PageTitle.headline(live ?? fallbackTitle, url: url)
+            let live = stillOnPage ? await liveDocumentTitle(for: pin.url) : nil
+            let titleToSave = PageTitle.headline(live ?? fallbackTitle, url: pin.url)
             // Decoupled task with userInitiated priority guarantees completion even if view/sheet is dismissed.
-            // A failed write surfaces through the app's existing error handling.
-            if let outcome = try? await pinWriter.addTab(
-                url: url,
-                title: titleToSave,
-                to: target.spaceId,
-                folderId: kind == .normal ? nil : target.folderId,
-                kind: kind
-            ), outcome.fellBackToPinned {
-                showPinNotice(String(localized: "share.saved.fallback_pinned"), duration: 6.0)
+            do {
+                let outcome = try await pinWriter.addTab(
+                    url: pin.url,
+                    title: titleToSave,
+                    to: target.spaceId,
+                    folderId: kind == .normal ? nil : target.folderId,
+                    kind: kind
+                )
+                if outcome.fellBackToPinned {
+                    showPinNotice(String(localized: "share.saved.fallback_pinned"), duration: 6.0)
+                }
+            } catch {
+                showPinNotice("\(String(localized: "browser.pin_failed")) \(error.zenUserMessage)", duration: 6.0)
             }
         }
     }
