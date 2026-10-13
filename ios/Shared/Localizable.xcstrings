@@ -115,6 +115,17 @@
         }
       }
     },
+    "browser.pin_failed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't save this tab."
+          }
+        }
+      }
+    },
     "browser.pin_no_space" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1132,7 +1143,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Share a link from Safari or any app and pick a space — it lands in your pinned tabs."
+            "value" : "Share a link from any app and pick a space — it lands in your pinned tabs."
           }
         }
       }

@@ -126,13 +126,21 @@ fun MiniBrowserScreen(
 
     DisposableEffect(Unit) {
         onDispose {
+            // This WebView is destroyed with the composition, so a posted
+            // document.title lookup would never call back and the deferred
+            // save would never reach the repository. Withdraw the live lookup
+            // first; the save falls back to the title captured when the
+            // banner opened.
+            viewModel.documentTitle = { null }
             viewModel.commitPendingPinSave()
         }
     }
 
     // Auto-focus URL bar if opened without initial URL
     LaunchedEffect(initialUrl) {
-        if (initialUrl.isNullOrEmpty()) {
+        // After a configuration change the page is already open: don't
+        // jump into the address bar again.
+        if (initialUrl.isNullOrEmpty() && viewModel.restoredUrl(launchKey) == null) {
             delay(200)
             focusRequester.requestFocus()
         }
@@ -202,7 +210,9 @@ fun MiniBrowserScreen(
                     .fillMaxWidth(),
             ) {
                 MiniBrowserWebView(
-                    initialUrl = initialUrl,
+                    // A recreated WebView (theme or font change) reopens the
+                    // page the user was on, not the one the browser opened with.
+                    initialUrl = viewModel.restoredUrl(launchKey) ?: initialUrl,
                     isAddressFocused = state.isAddressFocused,
                     onWebViewCreated = { webView = it },
                     onLoadingChange = viewModel::onLoadingChange,
@@ -297,8 +307,11 @@ fun MiniBrowserScreen(
 
                 // Normal-save fallback notice (same banner styling, anchored
                 // to the top so it never collides with the destination banner).
+                // Keep the last notice while it animates out.
+                var shownNotice by remember { mutableStateOf<MiniBrowserViewModel.Notice?>(null) }
+                state.notice?.let { shownNotice = it }
                 androidx.compose.animation.AnimatedVisibility(
-                    visible = state.fallbackNotice,
+                    visible = state.notice != null,
                     enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
                     exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(),
                     modifier = Modifier
@@ -323,8 +336,12 @@ fun MiniBrowserScreen(
                                 tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(20.dp),
                             )
+                            val notice = shownNotice
                             Text(
-                                text = stringResource(R.string.save_fallback_normal_off),
+                                text = listOfNotNull(
+                                    notice?.message?.let { stringResource(it) },
+                                    notice?.detail?.let { stringResource(it) },
+                                ).joinToString(" "),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurface,
                             )
