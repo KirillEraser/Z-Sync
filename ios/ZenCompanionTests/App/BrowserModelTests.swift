@@ -150,6 +150,117 @@ final class BrowserModelTests: XCTestCase {
         XCTAssertEqual(repo.refreshCount, 2, "manual refresh must hit the network again after the wait")
     }
 
+    /// A reload asked for mid-fetch (e.g. a write's stale signal) runs after
+    /// the current fetch instead of being dropped.
+    func testReloadDuringReloadRunsAgainAfterward() async {
+        let repo = FakeSpacesRepository()
+        repo.cached = snapshot(["a"])
+        repo.refreshResult = .success(snapshot(["a"]))
+        repo.blockRefresh = true
+        let model = makeModel(repo)
+
+        let inFlight = Task { await model.reload() }
+        while !repo.didBlockRefresh { await Task.yield() }
+        await model.reload()
+        XCTAssertEqual(repo.refreshCount, 1)
+
+        repo.blockRefresh = false
+        repo.releaseRefresh()
+        await inFlight.value
+
+        XCTAssertEqual(repo.refreshCount, 2, "the queued reload must run once the first finishes")
+    }
+
+    /// A stale signal that lands during a quiet (foreground) reload must run
+    /// once that fetch finishes too: `reloadQuietly` holds `reloading` during
+    /// its fetch, so the queue must be drained there as well, not only in
+    /// `reload()`.
+    func testStaleSignalDuringQuietReloadRunsAfterward() async {
+        let repo = FakeSpacesRepository()
+        repo.cached = snapshot(["a"])
+        repo.refreshResult = .success(snapshot(["a"]))
+        repo.blockRefresh = true
+        let model = makeModel(repo)
+
+        // Foreground refresh with cached spaces on screen: the quiet path.
+        let quiet = Task { await model.reloadQuietly() }
+        while !repo.didBlockRefresh { await Task.yield() }
+        // A write's stale signal lands mid-fetch.
+        await model.reload()
+        XCTAssertEqual(repo.refreshCount, 1)
+
+        repo.blockRefresh = false
+        repo.releaseRefresh()
+        await quiet.value
+
+        XCTAssertEqual(repo.refreshCount, 2, "the queued reload must run once the quiet fetch finishes")
+    }
+
+    /// An interrupted fetch holds `reloading` through its 700 ms retry pause
+    /// (like Android), so a reload arriving inside the pause queues and runs
+    /// after the retry instead of fetching alongside it.
+    func testInterruptedRetryDoesNotFetchAlongsideANewerReload() async {
+        let repo = FakeSpacesRepository()
+        repo.cached = snapshot(["a"])
+        repo.refreshResult = .failure(URLError(.cancelled))
+        let model = makeModel(repo)
+
+        // Fetch 1 is interrupted: the model pauses 700 ms before retrying.
+        let interrupted = Task { await model.reload() }
+        while model.loadError == nil { await Task.yield() }
+
+        // A newer reload arrives inside the pause and blocks mid-fetch.
+        repo.refreshResult = .success(snapshot(["a"]))
+        repo.blockRefresh = true
+        let newer = Task { await model.reload() }
+
+        // Let the pause expire so the retry path runs; the gate keeps the
+        // newer fetch in flight until then.
+        try? await Task.sleep(for: .milliseconds(1_500))
+        repo.blockRefresh = false
+        repo.releaseRefresh()
+        await interrupted.value
+        await newer.value
+
+        XCTAssertEqual(repo.refreshCount, 3, "the newer reload must still run")
+        XCTAssertEqual(
+            repo.maxConcurrentRefreshes, 1,
+            "the interrupted retry must queue behind the newer reload, not fetch alongside it"
+        )
+    }
+
+    /// A failed quiet (foreground) refresh surfaces in the status line like
+    /// every other refresh failure, and a later success clears it.
+    func testQuietReloadFailureSurfacesAndClearsInStatusLine() async {
+        let repo = FakeSpacesRepository()
+        repo.refreshResult = .failure(URLError(.timedOut))
+        let model = makeModel(repo)
+        model.snapshot = snapshot(["a"])
+
+        await model.reloadQuietly()
+
+        XCTAssertNotNil(model.loadError, "a failed foreground refresh must be visible in the dock line")
+
+        repo.refreshResult = .success(snapshot(["a", "b"]))
+        await model.reloadQuietly()
+
+        XCTAssertNil(model.loadError, "a successful foreground refresh must clear the line")
+    }
+
+    /// A failed delete says so in the status line instead of failing silently.
+    func testFailedDeleteShowsMessage() async {
+        let repo = FakeSpacesRepository()
+        repo.deleteError = ZenCompanion.SyncError.conflict
+        let model = makeModel(repo)
+
+        await model.deleteTab(id: "t1")
+
+        XCTAssertEqual(
+            model.deleteError,
+            "\(String(localized: "home.delete_failed")) \(String(localized: "error.conflict"))"
+        )
+    }
+
     func testZeroSpacesClearsError() async {
         let repo = FakeSpacesRepository()
         repo.refreshResult = .failure(URLError(.timedOut))
@@ -493,12 +604,16 @@ private final class FakeSpacesRepository: SpacesRepository {
     var cached: ZenCompanion.ZenSnapshot?
     var refreshResult: Result<ZenCompanion.ZenSnapshot, Error> = .failure(URLError(.badServerResponse))
     private(set) var refreshCount = 0
+    /// Highest number of refreshes in flight at once — pins that queued
+    /// reloads never fetch alongside the one that queued them.
+    private(set) var maxConcurrentRefreshes = 0
+    private var inFlightRefreshes = 0
     private(set) var deletedTabIds: [String] = []
     private(set) var renamedTabs: [(id: String, label: String)] = []
     private(set) var pinnedTabs: [(id: String, spaceId: String)] = []
     var blockRefresh = false
     private(set) var didBlockRefresh = false
-    private var refreshContinuation: CheckedContinuation<Void, Never>?
+    private var refreshWaiters: [CheckedContinuation<Void, Never>] = []
     var blockRename = false
     private(set) var didBlockRename = false
     private var renameContinuation: CheckedContinuation<Void, Never>?
@@ -512,9 +627,12 @@ private final class FakeSpacesRepository: SpacesRepository {
 
     func refresh() async throws -> ZenCompanion.ZenSnapshot {
         refreshCount += 1
+        inFlightRefreshes += 1
+        maxConcurrentRefreshes = max(maxConcurrentRefreshes, inFlightRefreshes)
+        defer { inFlightRefreshes -= 1 }
         if blockRefresh {
             await withCheckedContinuation { continuation in
-                refreshContinuation = continuation
+                refreshWaiters.append(continuation)
                 didBlockRefresh = true
             }
         }
@@ -523,7 +641,12 @@ private final class FakeSpacesRepository: SpacesRepository {
 
     func deleteCachedSnapshot() { cached = nil }
 
-    func deleteTab(id: String) async throws { deletedTabIds.append(id) }
+    var deleteError: Error?
+
+    func deleteTab(id: String) async throws {
+        deletedTabIds.append(id)
+        if let deleteError { throw deleteError }
+    }
 
     func renameTab(id: String, label: String) async throws {
         renamedTabs.append((id, label))
@@ -543,8 +666,9 @@ private final class FakeSpacesRepository: SpacesRepository {
     }
 
     func releaseRefresh() {
-        refreshContinuation?.resume()
-        refreshContinuation = nil
+        let waiters = refreshWaiters
+        refreshWaiters = []
+        waiters.forEach { $0.resume() }
     }
 
     func releaseRename() {

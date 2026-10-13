@@ -160,13 +160,18 @@ private fun SpacesBrowserRoot(viewModel: AppViewModel) {
         }
     }
 
-    // A new observer replays ON_START, so this also covers launch. Stops for a
-    // configuration change (dark mode, window resize) are not a trip away.
+    // A new observer replays ON_START, so this also covers launch. Returning
+    // to the foreground (e.g. after sharing from another app) refreshes what's
+    // on screen, like iOS. Stops for a configuration change (dark mode, window
+    // resize) are not a trip away.
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_START -> viewModel.appCameToForeground()
+                Lifecycle.Event.ON_START -> {
+                    viewModel.reload()
+                    viewModel.appCameToForeground()
+                }
                 Lifecycle.Event.ON_STOP ->
                     if ((context as? Activity)?.isChangingConfigurations != true) {
                         viewModel.appWentToBackground()

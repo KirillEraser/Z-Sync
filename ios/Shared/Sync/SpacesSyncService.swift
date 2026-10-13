@@ -116,7 +116,9 @@ enum SpacesSyncService {
             }
         }
 
-        let order = layout?.spaces ?? Array(spacesById.keys)
+        // Without a layout record every space falls through to the sorted
+        // list below, so the order is the same on every launch.
+        let order = layout?.spaces ?? []
         var seen = Set<String>()
         let orderedIds = order.filter { spacesById[$0] != nil && seen.insert($0).inserted }
         let unorderedIds = spacesById.keys.sorted().filter { !seen.contains($0) }
@@ -126,6 +128,12 @@ enum SpacesSyncService {
         }
 
         let essentials = assembleEssentials(layout: layout, allTabs: tabsById)
+
+        // Records came back but none decrypted into a space: that's a key
+        // problem, not an empty account. Fail so the cached spaces stay.
+        if spaces.isEmpty && decryptFailures > 0 {
+            throw SyncError.crypto("spaces: \(decryptFailures) records failed to decrypt")
+        }
 
         log.info("spaces sync: \(spaceRecords.count, privacy: .public) records, \(decryptFailures, privacy: .public) decrypt failures, \(skippedKinds, privacy: .public) ignored → spaces: \(spaces.count, privacy: .public), tabs: \(tabsById.count, privacy: .public), folders: \(foldersById.count, privacy: .public), splits: \(splitsById.count, privacy: .public), essentials: \(essentials.values.map(\.count).reduce(0, +), privacy: .public), normal-tabs pref: \(prefs.normalTabs, privacy: .public), separate-essentials pref: \(String(describing: prefs.separateEssentials), privacy: .public), gated normal items: \(gatedNormalItems, privacy: .public)")
 
@@ -243,6 +251,19 @@ enum SpacesSyncService {
         return byBucket
     }
 
+    /// Deterministic tab-title order for tabs that arrive outside `children`
+    /// order: fixed-locale case folding plus the tab id as tie-breaker, the
+    /// same rule as Android's `compareByStableTitle`. Dictionary iteration
+    /// order (randomized per process) must not leak into equal titles, and the
+    /// device locale must not pick the order: `localizedCaseInsensitiveCompare`
+    /// sorts "Ärger" before "azur", the fixed fold says the opposite.
+    private static func byStableTitle(_ a: ZenTab, _ b: ZenTab) -> Bool {
+        let la = a.title.lowercased(with: Locale(identifier: "en_US_POSIX"))
+        let lb = b.title.lowercased(with: Locale(identifier: "en_US_POSIX"))
+        if la != lb { return la < lb }
+        return a.id < b.id
+    }
+
     static func makeSpace(
         from record: ZenSpaceRecord,
         allTabs: [String: ZenTabRecord],
@@ -281,15 +302,17 @@ enum SpacesSyncService {
             case .split(let s): return s.tabs.map(\.id)
             }
         })
+        // A tab whose folder record is missing has nowhere else to render.
         let unplacedRecords = allTabs.values.filter {
-            $0.workspaceUuid == record.uuid && $0.essential != true && $0.folderId == nil
+            $0.workspaceUuid == record.uuid && $0.essential != true
+                && ($0.folderId == nil || folders[$0.folderId!] == nil)
                 && !placedTabIds.contains($0.tabId)
                 && !FaviconResolver.isLocalURL($0.url)
         }
         func sortedTabItems(_ records: [ZenTabRecord]) -> [ZenItem] {
             records
                 .compactMap(makeTab)
-                .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+                .sorted(by: byStableTitle)
                 .map { ZenItem.tab($0) }
         }
         pinnedItems.append(contentsOf: sortedTabItems(unplacedRecords.filter { !$0.isNormalTab }))
@@ -322,7 +345,8 @@ enum SpacesSyncService {
         var items: [ZenItem] = []
         for id in ids {
             if let record = allTabs[id] {
-                if topLevel && record.folderId != nil { continue }
+                // A folder member renders inside its folder, if that folder exists.
+                if topLevel, let folderId = record.folderId, folders[folderId] != nil { continue }
                 if let tab = makeTab(record) { items.append(.tab(tab)) }
             } else if let folder = folders[id] {
                 // Folders nested under another folder render inside it, not here.
@@ -371,6 +395,14 @@ enum SpacesSyncService {
                     guard let tab = makeTab(tabRecord) else { continue }
                     tabs.append(tab)
                     placed.insert(childId)
+                } else if let split = splits[childId] {
+                    // Folders have no split rows: keep the members in the
+                    // split's place instead of dropping them to the end.
+                    for memberId in split.tabs ?? [] where !placed.contains(memberId) {
+                        guard let member = allTabs[memberId].flatMap(makeTab) else { continue }
+                        tabs.append(member)
+                        placed.insert(memberId)
+                    }
                 } else if let childFolder = folders[childId], childFolder.folderId != folder.folderId {
                     subfolders.append(makeFolderTree(
                         childFolder,
@@ -399,6 +431,7 @@ enum SpacesSyncService {
             let extraTabs = allTabs.values
                 .filter { $0.folderId == folder.folderId && !placed.contains($0.tabId) }
                 .compactMap(makeTab)
+                .sorted(by: byStableTitle)
             tabs.append(contentsOf: extraTabs)
         }
 

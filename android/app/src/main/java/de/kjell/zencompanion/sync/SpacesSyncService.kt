@@ -113,7 +113,9 @@ object SpacesSyncService {
             }
         }
 
-        val order = layout?.spaces ?: spacesById.keys.toList()
+        // Without a layout record every space falls through to the sorted
+        // list below, so the order matches iOS on every launch.
+        val order = layout?.spaces ?: emptyList()
         val seen = mutableSetOf<String>()
         val orderedIds = order.filter { spacesById.containsKey(it) && seen.add(it) }
         val unorderedIds = spacesById.keys.sorted().filter { !seen.contains(it) }
@@ -123,6 +125,12 @@ object SpacesSyncService {
         }
 
         val essentials = assembleEssentials(layout, tabsById)
+
+        // Records came back but none decrypted into a space: that's a key
+        // problem, not an empty account. Fail so the cached spaces stay.
+        if (spaces.isEmpty() && decryptFailures > 0) {
+            throw SyncError.Crypto("spaces: $decryptFailures records failed to decrypt")
+        }
 
         android.util.Log.i(
             "SpacesSync",
@@ -296,6 +304,20 @@ object SpacesSyncService {
         return byBucket
     }
 
+    /**
+     * Deterministic tab-title order for tabs that arrive outside `children`
+     * order: fixed-locale case folding plus the tab id as tie-breaker, the
+     * same rule as the Swift `byStableTitle`. Map iteration order (network
+     * arrival order on some builds) must not leak into equal titles, and the
+     * device locale must not pick the order.
+     */
+    internal fun compareByStableTitle(a: ZenSpaces.ZenTab, b: ZenSpaces.ZenTab): Int {
+        val la = a.title.lowercase(java.util.Locale.ROOT)
+        val lb = b.title.lowercase(java.util.Locale.ROOT)
+        if (la != lb) return la.compareTo(lb)
+        return a.id.compareTo(b.id)
+    }
+
     internal fun makeSpace(
         record: ZenSpaces.ZenSpaceRecord,
         allTabs: Map<String, ZenSpaces.ZenTabRecord>,
@@ -333,15 +355,17 @@ object SpacesSyncService {
                 }
             }
         }
+        // A tab whose folder record is missing has nowhere else to render.
         val unplacedRecords = allTabs.values.filter {
             it.workspaceUuid == record.uuid && it.essential != true &&
-                it.folderId == null && !placedTabIds.contains(it.tabId) &&
+                (it.folderId == null || !folders.containsKey(it.folderId)) &&
+                !placedTabIds.contains(it.tabId) &&
                 !de.kjell.zencompanion.favicon.FaviconResolver.isLocalURL(it.url)
         }
         fun sortedTabItems(records: List<ZenSpaces.ZenTabRecord>): List<ZenSpaces.ZenItem> =
             records
                 .mapNotNull { makeTab(it) }
-                .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.title })
+                .sortedWith { a, b -> compareByStableTitle(a, b) }
                 .map { ZenSpaces.ZenItem.Tab(it) }
         pinnedItems.addAll(sortedTabItems(unplacedRecords.filter { !it.isNormalTab }))
         normalItems.addAll(sortedTabItems(unplacedRecords.filter { it.isNormalTab }))
@@ -372,7 +396,8 @@ object SpacesSyncService {
         for (id in ids) {
             val tabRecord = allTabs[id]
             if (tabRecord != null) {
-                if (topLevel && tabRecord.folderId != null) continue
+                // A folder member renders inside its folder, if that folder exists.
+                if (topLevel && tabRecord.folderId != null && folders.containsKey(tabRecord.folderId)) continue
                 makeTab(tabRecord)?.let { items.add(ZenSpaces.ZenItem.Tab(it)) }
             } else {
                 val folderRecord = folders[id]
@@ -426,10 +451,20 @@ object SpacesSyncService {
         if (depth < 4) {
             for (childId in folder.children ?: emptyList()) {
                 val tabRecord = allTabs[childId]
+                val splitRecord = splits[childId]
                 if (tabRecord != null) {
                     makeTab(tabRecord)?.let {
                         tabs.add(it)
                         placed.add(childId)
+                    }
+                } else if (splitRecord != null) {
+                    // Folders have no split rows: keep the members in the
+                    // split's place instead of dropping them to the end.
+                    for (memberId in splitRecord.tabs ?: emptyList()) {
+                        if (placed.contains(memberId)) continue
+                        val member = allTabs[memberId]?.let { makeTab(it) } ?: continue
+                        tabs.add(member)
+                        placed.add(memberId)
                     }
                 } else {
                     val childFolder = folders[childId]
@@ -448,6 +483,7 @@ object SpacesSyncService {
             allTabs.values
                 .filter { it.folderId == folder.folderId && !placed.contains(it.tabId) }
                 .mapNotNull { makeTab(it) }
+                .sortedWith { a, b -> compareByStableTitle(a, b) }
                 .forEach { tabs.add(it) }
         }
 
