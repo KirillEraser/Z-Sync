@@ -490,6 +490,9 @@ timestamp string in the same format as `X-Last-Modified` (e.g. `"1700000000.00"`
   partial POST outcome is handled the same way: re-read, recompute the same
   semantic edit against the fresh state, and retry once. Edits MUST be idempotent
   for this to be safe (reuse the same new record id, union rather than append).
+  A retry that finds its edit already half-applied (some records stored, others
+  rejected) MUST complete the missing records instead of treating the fresh
+  state as a no-op.
 - **Collection without a timestamp.** When the read that plans a conditional POST
   returns no `X-Last-Modified` (for example a 404 on a collection that does not
   exist yet), the client MUST send `X-If-Unmodified-Since: "0"` rather than drop
@@ -671,9 +674,10 @@ fixtures, but fixtures do not pin them and future work SHOULD remove them:
   synthesized parents, fail-closed removals on undecryptable records, preservation of
   unknown cleartext fields, and key-record validation. §7.2 now states that a
   multi-record POST is conditioned as a whole but applied per record, that partial
-  outcomes are retried once like a 412, and that a missing collection timestamp is
-  sent as `"0"`. Contract-Version stays 1: the wire format is unchanged and the new
-  rules only make clients refuse unsafe writes.
+  outcomes are retried once like a 412, that a missing collection timestamp is
+  sent as `"0"`, and that a retried edit finding its target half-applied
+  completes it rather than reporting a no-op. Contract-Version stays 1: the wire
+  format is unchanged and the new rules only make clients refuse unsafe writes.
 
 - **2026-10-04 — Essentials merge de-duplication by URL.** When merging essentials
   buckets for shared display, entries are now de-duplicated by URL across buckets

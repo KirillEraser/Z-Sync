@@ -1102,6 +1102,35 @@ class ConflictSafeSyncTests {
         assertEquals("Work", server.cleartext("t1")!!.getJSONObject("data").getString("staticLabel"))
     }
 
+    @Test
+    fun mixedChildrenKeepStringEntries() {
+        val server = ConflictServer(keys, syncKeys)
+        server.seedTab("t1", "space-1")
+        fun seedMixedSpace() =
+            server.putRecord(
+                "space-1",
+                JSONObject()
+                    .put("id", "space-1")
+                    .put("kind", "space")
+                    .put(
+                        "data",
+                        JSONObject()
+                            .put("uuid", "space-1")
+                            .put("children", JSONArray(listOf("t1", 42, "t2"))),
+                    ),
+            )
+        seedMixedSpace()
+
+        val newId = runBlocking {
+            SpacesSyncService.addTab(client(server), "https://new.example", "New", "space-1")
+        }.recordId
+        assertEquals(listOf("t1", "t2", newId), server.children("space-1"))
+
+        seedMixedSpace()
+        runBlocking { SpacesSyncService.deleteTab(client(server), id = "t1") }
+        assertEquals(listOf("t2"), server.children("space-1"))
+    }
+
     // MARK: Legacy switch-off path
 
     @Test

@@ -881,7 +881,7 @@ object SpacesSyncService {
             return listOf(write)
         }
         var outcome = client.postRecords(collection, batchFor(incoming), read.lastModified)
-        if (outcome is PostOutcome.PreconditionFailed) {
+        if (outcome is PostOutcome.PreconditionFailed || outcome is PostOutcome.PartialFailure) {
             read = client.getCollectionWithMetadata(collection)
             incoming = decryptedFrom(client, read.records)
             outcome = client.postRecords(collection, batchFor(incoming), read.lastModified)
@@ -984,8 +984,11 @@ object SpacesSyncService {
         var read = client.getCollectionWithMetadata(collection)
         var incoming = decryptedFrom(client, read.records)
         var attempted = false
+        // True once the server stored part of the previous batch; the next
+        // plan then completes the missing records instead of no-op'ing.
+        var repairs = false
         fun batchFor(list: List<IncomingCleartext>): List<JSONObject> =
-            when (val plan = pinPlan(id, spaceId, list)) {
+            when (val plan = pinPlan(id, spaceId, list, repairs)) {
                 MovePlan.Missing -> throw SyncError.Conflict("pin '$id': tab record not found")
                 MovePlan.Unchanged -> emptyList()
                 is MovePlan.Writes -> plan.records
@@ -994,7 +997,8 @@ object SpacesSyncService {
         if (batch.isEmpty()) return false
         attempted = true
         var outcome = client.postRecords(collection, batch, read.lastModified)
-        if (outcome is PostOutcome.PreconditionFailed) {
+        if (outcome is PostOutcome.PreconditionFailed || outcome is PostOutcome.PartialFailure) {
+            repairs = outcome is PostOutcome.PartialFailure
             read = client.getCollectionWithMetadata(collection)
             incoming = decryptedFrom(client, read.records)
             batch = batchFor(incoming)
@@ -1031,30 +1035,42 @@ object SpacesSyncService {
     /**
      * The tab's `pinned` flag, its cleared `folderId`, and the parent
      * `children` rewrites that move the id out of any folder and into the
-     * space record. A tab that is already pinned is left untouched, so the
-     * action never pretends a write happened.
+     * space record. A tab that is already pinned is left untouched (the
+     * action is only offered on normal tabs); the one exception is the
+     * retry after a partial POST, which knows this batch stored some records
+     * and completes the ones the server rejected ([repair]).
      */
-    private fun pinPlan(id: String, spaceId: String, incoming: List<IncomingCleartext>): MovePlan {
+    private fun pinPlan(
+        id: String,
+        spaceId: String,
+        incoming: List<IncomingCleartext>,
+        repair: Boolean = false,
+    ): MovePlan {
         val tab = incoming.firstOrNull { it.id == id } ?: return MovePlan.Missing
         if (tab.kind != "tab") return MovePlan.Missing
-        if (!isNormalTab(tab.data)) return MovePlan.Unchanged
         val owner = ZenSpaces.optStringOrNull(tab.data, "workspaceUuid")
         if (owner != null && owner != spaceId) return MovePlan.Unchanged
+        val newParent = parentRecord(null, spaceId, incoming)
+        val alreadyPinned = !isNormalTab(tab.data)
+        if (alreadyPinned && !repair) return MovePlan.Unchanged
 
-        val tabData = JSONObject(tab.data.toString())
-        tabData.put("pinned", true)
-        tabData.put("folderId", JSONObject.NULL)
-        val writes = mutableListOf(rewritten(tab, tabData))
+        val writes = mutableListOf<JSONObject>()
+        if (!alreadyPinned) {
+            val tabData = JSONObject(tab.data.toString())
+            tabData.put("pinned", true)
+            tabData.put("folderId", JSONObject.NULL)
+            writes.add(rewritten(tab, tabData))
+        }
 
         // A normal tab usually already sits in the space `children`, so the
         // order-preserving union is then a no-op and only the tab is written.
-        val newParent = parentRecord(null, spaceId, incoming)
         incoming.filter { it.id != newParent?.id }.forEach { parent ->
             childrenWrite(parent) { SpacesSyncEdits.removing(id, it) }?.let { writes.add(it) }
         }
         newParent?.let { parent ->
             childrenWrite(parent) { SpacesSyncEdits.union(it, listOf(id)) }?.let { writes.add(it) }
         }
+        if (writes.isEmpty()) return MovePlan.Unchanged
         return MovePlan.Writes(writes)
     }
 
@@ -1072,8 +1088,11 @@ object SpacesSyncService {
         var read = client.getCollectionWithMetadata(collection)
         var incoming = decryptedFrom(client, read.records)
         var attempted = false
+        // True once the server stored part of the previous batch; the next
+        // plan then completes the missing records instead of no-op'ing.
+        var repairs = false
         fun batchFor(list: List<IncomingCleartext>): List<JSONObject> =
-            when (val plan = movePlan(id, folderId, spaceId, list)) {
+            when (val plan = movePlan(id, folderId, spaceId, list, repairs)) {
                 MovePlan.Missing -> throw SyncError.Conflict("move '$id': tab record not found")
                 MovePlan.Unchanged -> emptyList()
                 is MovePlan.Writes -> plan.records
@@ -1082,7 +1101,8 @@ object SpacesSyncService {
         if (batch.isEmpty()) return false
         attempted = true
         var outcome = client.postRecords(collection, batch, read.lastModified)
-        if (outcome is PostOutcome.PreconditionFailed) {
+        if (outcome is PostOutcome.PreconditionFailed || outcome is PostOutcome.PartialFailure) {
+            repairs = outcome is PostOutcome.PartialFailure
             read = client.getCollectionWithMetadata(collection)
             incoming = decryptedFrom(client, read.records)
             batch = batchFor(incoming)
@@ -1131,13 +1151,16 @@ object SpacesSyncService {
      * Tab `folderId` plus the old and new parent's `children`. A folder that
      * does not belong to [spaceId] falls back to the space root (SPEC §3.5),
      * so a tab never lands in another space's folder. An already-current
-     * place produces no writes.
+     * place produces no writes; the one exception is the retry after a
+     * partial POST, which knows this batch stored some records and completes
+     * the ones the server rejected ([repair]).
      */
     private fun movePlan(
         id: String,
         folderId: String?,
         spaceId: String,
         incoming: List<IncomingCleartext>,
+        repair: Boolean = false,
     ): MovePlan {
         val tab = incoming.firstOrNull { it.id == id } ?: return MovePlan.Missing
         if (tab.kind != "tab") return MovePlan.Missing
@@ -1148,16 +1171,20 @@ object SpacesSyncService {
         val current = currentFolderId(tab.data)
         val target = resolveMoveFolder(folderId, spaceId, incoming)
         val targetFolderId = target?.folderId
-        if (current == targetFolderId) return MovePlan.Unchanged
+        val newParent = parentRecord(targetFolderId, spaceId, incoming)
+        val completing = current == targetFolderId
+        if (completing && !repair) return MovePlan.Unchanged
 
-        val tabData = JSONObject(tab.data.toString())
-        tabData.put("folderId", targetFolderId ?: JSONObject.NULL)
-        val writes = mutableListOf(rewritten(tab, tabData))
+        val writes = mutableListOf<JSONObject>()
+        if (!completing) {
+            val tabData = JSONObject(tab.data.toString())
+            tabData.put("folderId", targetFolderId ?: JSONObject.NULL)
+            writes.add(rewritten(tab, tabData))
+        }
 
         // Take the tab out of every parent that lists it, as delete does. Looking
         // the old folder up by workspaceUuid misses folders without one (optional,
         // SPEC §3.5), and the tab would then show in both places.
-        val newParent = parentRecord(targetFolderId, spaceId, incoming)
         incoming.filter { it.id != newParent?.id }.forEach { parent ->
             childrenWrite(parent) { SpacesSyncEdits.removing(id, it) }?.let { writes.add(it) }
         }
@@ -1166,6 +1193,7 @@ object SpacesSyncService {
                 SpacesSyncEdits.union(SpacesSyncEdits.removing(id, children), listOf(id))
             }?.let { writes.add(it) }
         }
+        if (writes.isEmpty()) return MovePlan.Unchanged
         return MovePlan.Writes(writes)
     }
 

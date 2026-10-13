@@ -972,17 +972,22 @@ enum SpacesSyncService {
 
     /// Conflict-safe pin: one consistent read, then a conditional POST of the
     /// tab plus the parent `children` rewrites. A 412 re-reads and reapplies
-    /// only this pin, so concurrent edits to other fields survive. Retry once.
+    /// only this pin, so concurrent edits to other fields survive. A partial
+    /// outcome re-reads and completes whatever the server rejected; the
+    /// retry MUST NOT loop.
     private static func pinTabConflictSafe(
         client: SyncClient,
         id: String,
         in spaceId: String
     ) async throws -> Bool {
         var attempted = false
+        // True once the server stored part of the previous batch; the next
+        // plan then completes the missing records instead of no-op'ing.
+        var repairsHalfAppliedEdits = false
         for attempt in 0..<2 {
             let (records, lastModified) = try await client.getCollectionWithMetadata(collection: collection)
             let incoming = try await decryptedCleartexts(client: client, records: records)
-            switch pinPlan(id: id, spaceId: spaceId, incoming: incoming) {
+            switch pinPlan(id: id, spaceId: spaceId, incoming: incoming, repair: repairsHalfAppliedEdits) {
             case .missing:
                 throw SyncError.conflict
             case .unchanged:
@@ -1000,7 +1005,8 @@ enum SpacesSyncService {
                 case .preconditionFailed:
                     if attempt == 1 { throw SyncError.conflict }
                 case .partialFailure:
-                    throw SyncError.conflict
+                    repairsHalfAppliedEdits = true
+                    if attempt == 1 { throw SyncError.conflict }
                 }
             }
         }
@@ -1030,7 +1036,9 @@ enum SpacesSyncService {
 
     /// Conflict-safe move: one consistent read, then a conditional POST of the
     /// tab plus the old and new parent. A 412 re-reads and reapplies only this
-    /// move, so concurrent edits to other fields survive. Retry once.
+    /// move, so concurrent edits to other fields survive. A partial outcome
+    /// re-reads and completes whatever the server rejected; the retry MUST
+    /// NOT loop.
     private static func moveTabConflictSafe(
         client: SyncClient,
         id: String,
@@ -1038,10 +1046,13 @@ enum SpacesSyncService {
         spaceId: String
     ) async throws -> Bool {
         var attempted = false
+        // True once the server stored part of the previous batch; the next
+        // plan then completes the missing records instead of no-op'ing.
+        var repairsHalfAppliedEdits = false
         for attempt in 0..<2 {
             let (records, lastModified) = try await client.getCollectionWithMetadata(collection: collection)
             let incoming = try await decryptedCleartexts(client: client, records: records)
-            switch movePlan(id: id, folderId: folderId, spaceId: spaceId, incoming: incoming) {
+            switch movePlan(id: id, folderId: folderId, spaceId: spaceId, incoming: incoming, repair: repairsHalfAppliedEdits) {
             case .missing:
                 throw SyncError.conflict
             case .unchanged:
@@ -1059,7 +1070,8 @@ enum SpacesSyncService {
                 case .preconditionFailed:
                     if attempt == 1 { throw SyncError.conflict }
                 case .partialFailure:
-                    throw SyncError.conflict
+                    repairsHalfAppliedEdits = true
+                    if attempt == 1 { throw SyncError.conflict }
                 }
             }
         }
@@ -1097,12 +1109,15 @@ enum SpacesSyncService {
     /// Tab `folderId` plus the old and new parent's `children`. A folder that
     /// does not belong to [spaceId] falls back to the space root (SPEC §3.5),
     /// so a tab never lands in another space's folder. An already-current
-    /// place produces no writes.
+    /// place produces no writes; the one exception is the retry after a
+    /// partial POST, which knows this batch stored some records and completes
+    /// the ones the server rejected (`repair`).
     private static func movePlan(
         id: String,
         folderId: String?,
         spaceId: String,
-        incoming: [IncomingCleartext]
+        incoming: [IncomingCleartext],
+        repair: Bool = false
     ) -> MovePlan {
         guard let tab = incoming.first(where: { $0.id == id }), tab.kind == "tab" else {
             return .missing
@@ -1115,16 +1130,20 @@ enum SpacesSyncService {
         let current = nonEmptyFolderId(tab.data["folderId"])
         let target = resolveMoveFolder(folderId: folderId, spaceId: spaceId, incoming: incoming)
         let targetFolderId = target?.folderId
-        if current == targetFolderId { return .unchanged }
+        let newParent = parentRecord(folderId: targetFolderId, spaceId: spaceId, incoming: incoming)
+        let completing = current == targetFolderId
+        if completing && !repair { return .unchanged }
 
-        var tabData = tab.data
-        tabData["folderId"] = targetFolderId ?? NSNull()
-        var writes = [rewrittenWrite(tab, data: tabData)]
+        var writes: [SyncWriteRecord] = []
+        if !completing {
+            var tabData = tab.data
+            tabData["folderId"] = targetFolderId ?? NSNull()
+            writes.append(rewrittenWrite(tab, data: tabData))
+        }
 
         // Take the tab out of every parent that lists it, as delete does. Looking
         // the old folder up by workspaceUuid misses folders without one (optional,
         // SPEC §3.5), and the tab would then show in both places.
-        let newParent = parentRecord(folderId: targetFolderId, spaceId: spaceId, incoming: incoming)
         for parent in incoming where parent.id != newParent?.id {
             if let removed = childrenWrite(parent, transform: { SpacesSyncEdits.removing(id, from: $0) }) {
                 writes.append(removed)
@@ -1135,34 +1154,42 @@ enum SpacesSyncService {
         }) {
             writes.append(added)
         }
+        if writes.isEmpty { return .unchanged }
         return .writes(writes)
     }
 
     /// The tab's `pinned` flag, its cleared `folderId`, and the parent
     /// `children` rewrites that move the id out of any folder and into the
-    /// space record. A tab that is already pinned is left untouched, so the
-    /// action never pretends a write happened.
+    /// space record. A tab that is already pinned is left untouched (the
+    /// action is only offered on normal tabs); the one exception is the
+    /// retry after a partial POST, which knows this batch stored some
+    /// records and completes the ones the server rejected (`repair`).
     private static func pinPlan(
         id: String,
         spaceId: String,
-        incoming: [IncomingCleartext]
+        incoming: [IncomingCleartext],
+        repair: Bool = false
     ) -> MovePlan {
         guard let tab = incoming.first(where: { $0.id == id }), tab.kind == "tab" else {
             return .missing
         }
-        if !isNormalTab(tab.data) { return .unchanged }
         if let owner = tab.data["workspaceUuid"] as? String, !owner.isEmpty, owner != spaceId {
             return .unchanged
         }
+        let newParent = parentRecord(folderId: nil, spaceId: spaceId, incoming: incoming)
+        let alreadyPinned = !isNormalTab(tab.data)
+        if alreadyPinned && !repair { return .unchanged }
 
-        var tabData = tab.data
-        tabData["pinned"] = true
-        tabData["folderId"] = NSNull()
-        var writes = [rewrittenWrite(tab, data: tabData)]
+        var writes: [SyncWriteRecord] = []
+        if !alreadyPinned {
+            var tabData = tab.data
+            tabData["pinned"] = true
+            tabData["folderId"] = NSNull()
+            writes.append(rewrittenWrite(tab, data: tabData))
+        }
 
         // A normal tab usually already sits in the space `children`, so the
         // order-preserving union is then a no-op and only the tab is written.
-        let newParent = parentRecord(folderId: nil, spaceId: spaceId, incoming: incoming)
         for parent in incoming where parent.id != newParent?.id {
             if let removed = childrenWrite(parent, transform: { SpacesSyncEdits.removing(id, from: $0) }) {
                 writes.append(removed)
@@ -1173,6 +1200,7 @@ enum SpacesSyncService {
         }) {
             writes.append(added)
         }
+        if writes.isEmpty { return .unchanged }
         return .writes(writes)
     }
 
@@ -1239,9 +1267,10 @@ enum SpacesSyncService {
     }
 
     /// Conflict-safe rename: one consistent read, then a conditional POST of
-    /// the tab record with only `staticLabel` changed. A 412 re-reads and
-    /// reapplies the label on the fresh record so concurrent field edits
-    /// survive; retry once.
+    /// the tab record with only `staticLabel` changed. A 412 or a partial
+    /// outcome re-reads and reapplies the label on the fresh record so
+    /// concurrent field edits survive; the edit is idempotent, and the
+    /// retry MUST NOT loop.
     private static func renameTabConflictSafe(
         client: SyncClient,
         id: String,
@@ -1261,10 +1290,8 @@ enum SpacesSyncService {
             switch outcome {
             case .applied:
                 return
-            case .preconditionFailed:
+            case .preconditionFailed, .partialFailure:
                 if attempt == 1 { throw SyncError.conflict }
-            case .partialFailure:
-                throw SyncError.conflict
             }
         }
         throw SyncError.conflict
