@@ -5,6 +5,7 @@ import de.kjell.zencompanion.share.SharePhase
 import de.kjell.zencompanion.share.ShareRepository
 import de.kjell.zencompanion.share.ShareViewModel
 import de.kjell.zencompanion.sync.SpacesSyncService
+import de.kjell.zencompanion.sync.SyncError
 import de.kjell.zencompanion.sync.ZenSpaces
 import de.kjell.zencompanion.ui.components.PinDestination
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -14,6 +15,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -100,6 +102,37 @@ class ShareViewModelTests {
         assertEquals(SharePhase.saving, phaseAfterRefresh)
         assertEquals(1, repository.added.size)
         assertEquals(SharePhase.saved, vm.state.value.phase)
+        advanceUntilIdle()
+    }
+
+    @Test
+    fun refreshAfterAFailedSaveKeepsTheError() = runTest(mainDispatcherRule.testDispatcher) {
+        val space = testSpace("s1")
+        val repository = FakeShareRepository(
+            signedIn = true,
+            cached = ZenSpaces.ZenSnapshot(listOf(space)),
+            fresh = ZenSpaces.ZenSnapshot(listOf(space)),
+            failure = SyncError.Conflict(),
+        )
+        val vm = ShareViewModel(
+            repository = repository,
+            initialUrl = "https://example.com",
+            initialPageTitle = "Example",
+        )
+        runCurrent()
+
+        vm.save()
+        runCurrent()
+        assertEquals(SharePhase.failed, vm.state.value.phase)
+
+        // The cached snapshot shows the picker before the bootstrap refresh
+        // returns, so a refresh can land after the write already failed. It
+        // must not replace the failure with the picker.
+        vm.refreshSpaces()
+        runCurrent()
+
+        assertEquals(SharePhase.failed, vm.state.value.phase)
+        assertNotNull(vm.state.value.errorText)
         advanceUntilIdle()
     }
 
@@ -265,6 +298,8 @@ private class FakeShareRepository(
     private val fresh: ZenSpaces.ZenSnapshot,
     private val saveKind: SaveKind = SaveKind.PINNED,
     private val fallBackToPinned: Boolean = false,
+    /** When set, [addTab] fails instead of saving. */
+    private val failure: Exception? = null,
 ) : ShareRepository {
     data class AddedTab(
         val url: String,
@@ -300,6 +335,7 @@ private class FakeShareRepository(
         folderId: String?,
         kind: SaveKind,
     ): SpacesSyncService.AddTabOutcome {
+        failure?.let { throw it }
         added += AddedTab(url, title, spaceId, folderId, kind)
         duringAddTab?.let { hook ->
             duringAddTab = null

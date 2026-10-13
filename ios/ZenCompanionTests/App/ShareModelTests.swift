@@ -87,6 +87,31 @@ final class ShareModelTests: XCTestCase {
         XCTAssertEqual(model.phase, .saved)
     }
 
+    /// A refresh that lands after a failed write must not hide the failure.
+    ///
+    /// The cached snapshot shows the picker before the bootstrap refresh
+    /// returns, so a fast tap can fail the write while that refresh is still
+    /// in flight. Re-enabling `.pick` there dropped the error line.
+    func testRefreshAfterAFailedSaveKeepsTheError() async {
+        let space = space("s1")
+        let session = FakeShareSession(
+            signedIn: true,
+            cached: snapshot([space]),
+            fresh: snapshot([space])
+        )
+        let model = makeModel(session: session)
+        await model.bootstrap()
+
+        session.failAddTab = true
+        await model.save()
+        XCTAssertEqual(model.phase, .failed)
+
+        await model.refreshSpaces()
+
+        XCTAssertEqual(model.phase, .failed)
+        XCTAssertNotNil(model.error)
+    }
+
     func testVanishedFolderFallsBackToSpaceRoot() async {
         let withFolder = space("s1", folders: [ZenCompanion.ZenFolder(id: "gone", name: "Gone")])
         let session = FakeShareSession(
@@ -287,6 +312,8 @@ private final class FakeShareSession: ZenCompanion.ShareSessioning {
     private(set) var refreshCount = 0
     /// Runs inside `addTab`, before it returns, to simulate work landing mid-save.
     var duringAddTab: (() async -> Void)?
+    /// When true, `addTab` fails instead of saving.
+    var failAddTab = false
 
     init(
         signedIn: Bool,
@@ -318,6 +345,7 @@ private final class FakeShareSession: ZenCompanion.ShareSessioning {
         folderId: String?,
         kind: ZenCompanion.SaveKind
     ) async throws -> ZenCompanion.AddTabOutcome {
+        if failAddTab { throw ZenCompanion.SyncError.conflict }
         added.append(Added(url: url, title: title, spaceId: spaceId, folderId: folderId, kind: kind))
         if let hook = duringAddTab {
             duringAddTab = nil

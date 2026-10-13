@@ -221,8 +221,18 @@ class ShareViewModel(
                 it.copy(
                     spaces = fresh.spaces,
                     destination = destination,
-                    // A refresh that lands mid-save must not re-enable the button.
-                    phase = if (it.phase == SharePhase.saved || it.phase == SharePhase.saving) it.phase else SharePhase.pick,
+                    // A refresh that lands mid-save must not re-enable the
+                    // button, and one that lands after a failed write must
+                    // not hide the error.
+                    phase = if (
+                        it.phase == SharePhase.saved ||
+                        it.phase == SharePhase.saving ||
+                        it.phase == SharePhase.failed
+                    ) {
+                        it.phase
+                    } else {
+                        SharePhase.pick
+                    },
                 )
             }
         } catch (e: Exception) {

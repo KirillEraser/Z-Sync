@@ -234,8 +234,9 @@ final class ShareModel {
                       PinDestinationModel.folderName(folderId: folderId, in: currentSpace) == nil {
                 destination = PinDestination(spaceId: destination.spaceId)
             }
-            // A refresh that lands mid-save must not re-enable the button.
-            if phase != .saved && phase != .saving {
+            // A refresh that lands mid-save must not re-enable the button,
+            // and one that lands after a failed write must not hide the error.
+            if phase != .saved && phase != .saving && phase != .failed {
                 phase = .pick
             }
         } catch {
