@@ -134,10 +134,11 @@ internal fun MiniBrowserWebView(
                         return false
                     }
                 }
-                // The WebView has no download UI; hand files to the system,
-                // which opens them in the default browser's downloader.
+                // The WebView has no download UI; hand web files to the system,
+                // which opens them in the default browser's downloader. The page
+                // controls this URL, so only http(s) leaves the app.
                 setDownloadListener { url, _, _, _, _ ->
-                    if (!url.isNullOrEmpty()) openURLExternally(ctx, url)
+                    webUrlOrNull(url)?.let { openURLExternally(ctx, it) }
                 }
                 webChromeClient = object : WebChromeClient() {
                     override fun onProgressChanged(view: WebView?, newProgress: Int) {
@@ -201,6 +202,19 @@ internal fun MiniBrowserWebView(
 private fun addressDisplay(url: String): String {
     val host = runCatching { Uri.parse(url).host?.removePrefix("www.") }.getOrNull()
     return if (!host.isNullOrEmpty()) host else url
+}
+
+/**
+ * A download address from the page, or null when it is not http(s).
+ * Only web addresses leave the app, so a page cannot push `intent://`,
+ * `javascript:` or any other scheme into an implicit `ACTION_VIEW`.
+ */
+private fun webUrlOrNull(raw: String?): String? {
+    if (raw.isNullOrEmpty()) return null
+    return when (Uri.parse(raw).scheme?.lowercase()) {
+        "http", "https" -> raw
+        else -> null
+    }
 }
 
 @Suppress("DEPRECATION")
