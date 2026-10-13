@@ -663,6 +663,33 @@ final class ZenSpacesDecoderTests: XCTestCase {
         XCTAssertEqual(f.tabs.map(\.id), ["a", "m1", "m2", "z"])
     }
 
+    /// Unplaced tabs sort by title with a deterministic tie-breaker: fixed
+    /// locale case folding plus the tab id, the same rule as Android's
+    /// `compareByStableTitle` (folded code-unit order: "azur" < "same" < "ärger").
+    /// `localizedCaseInsensitiveCompare` sorts "Ärger" first (device-locale
+    /// ICU collation) where the fixed fold says the opposite, and dictionary
+    /// iteration order (randomized per process) must never pick the order of
+    /// equal titles.
+    func testMakeSpaceSortsUnplacedTabsStablyLikeAndroid() {
+        let space = ZenSpaceRecord(uuid: "space-1", name: "Work", children: [])
+        func tab(_ id: String, _ title: String) -> ZenTabRecord {
+            ZenTabRecord(tabId: id, url: "https://\(id).de", title: title, workspaceUuid: "space-1")
+        }
+
+        let built = SpacesSyncService.makeSpace(
+            from: space,
+            allTabs: [
+                "a-1": tab("a-1", "Ärger"),
+                "a-2": tab("a-2", "azur"),
+                "t-b": tab("t-b", "Same"),
+                "t-a": tab("t-a", "Same"),
+            ],
+            folders: [:]
+        )
+
+        XCTAssertEqual(built.pinned.map(\.id), ["a-2", "t-a", "t-b", "a-1"])
+    }
+
     func testMakeSpaceWithoutNormalTabsKeepsOldBehaviour() {
         let space = ZenSpaceRecord(uuid: "space-1", name: "Work", children: ["p1", "p2"])
         let p1 = ZenTabRecord(tabId: "p1", url: "https://p1.de", title: "P1", workspaceUuid: "space-1")

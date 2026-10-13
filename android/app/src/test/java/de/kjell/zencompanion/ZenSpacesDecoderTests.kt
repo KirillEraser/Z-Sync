@@ -455,6 +455,35 @@ class ZenSpacesDecoderTests {
     }
 
     @Test
+    fun makeSpaceSortsUnplacedTabsStablyLikeSwift() {
+        val space = ZenSpaces.ZenSpaceRecord(
+            uuid = "space-1", name = "Work", icon = null, theme = null,
+            containerGuid = null, children = emptyList(),
+        )
+        fun rec(id: String, title: String) = ZenSpaces.ZenTabRecord(
+            tabId = id, url = "https://$id.de", title = title, icon = null,
+            containerGuid = null, essential = false, workspaceUuid = "space-1",
+            folderId = null, staticLabel = null, hasStaticIcon = null, defaultContainer = null,
+        )
+        val built = SpacesSyncService.makeSpace(
+            record = space,
+            // Insertion order deliberately disagrees with the expected order:
+            // equal titles must break by tab id, never by map iteration order.
+            // Folded code-unit order: "azur" < "same" < "ärger" — the same
+            // result as the Swift `byStableTitle`, not device-locale collation.
+            allTabs = mapOf(
+                "t-b" to rec("t-b", "Same"),
+                "t-a" to rec("t-a", "Same"),
+                "a-1" to rec("a-1", "Ärger"),
+                "a-2" to rec("a-2", "azur"),
+            ),
+            folders = emptyMap(),
+            splits = emptyMap(),
+        )
+        assertEquals(listOf("a-2", "t-a", "t-b", "a-1"), built.pinned.map { it.id })
+    }
+
+    @Test
     fun makeSpacePartitionsNormalSplit() {
         val space = ZenSpaces.ZenSpaceRecord(
             uuid = "space-1", name = "Work", icon = null, theme = null,

@@ -231,6 +231,15 @@ final class BrowserModel {
             return
         }
         await reloadOnce(retryAttempted: retryAttempted)
+        await drainQueuedReloads()
+    }
+
+    /// Runs any reload queued while a fetch was in flight. `reloadOnce` and
+    /// `reloadQuietly` both hold `reloading` during their fetch, so the queue
+    /// must be drained after either — otherwise a stale signal that lands
+    /// during a quiet foreground refresh stays pending until an arbitrary
+    /// later reload happens to run it.
+    private func drainQueuedReloads() async {
         while reloadQueued {
             reloadQueued = false
             await reloadOnce(retryAttempted: false)
@@ -275,7 +284,9 @@ final class BrowserModel {
             if Self.isCancellation(error) {
                 loadError = String(localized: "error.interrupted")
                 if !retryAttempted {
-                    reloading = false
+                    // Hold `reloading` through the pause (like Android): a reload
+                    // that arrives meanwhile queues and runs after the retry,
+                    // instead of fetching alongside it and racing the flag.
                     loading = false
                     try? await Task.sleep(for: .milliseconds(700))
                     await reloadOnce(retryAttempted: true)
@@ -289,14 +300,17 @@ final class BrowserModel {
         loading = false
     }
 
-    /// Silent foreground refresh: swap in fresh data, never surface network
-    /// errors (the cached view stays as-is; the retry button covers failures).
+    /// Silent foreground refresh: swap in fresh data without a spinner. A
+    /// failure surfaces in the dock's status line like every other refresh
+    /// failure (the cached view stays on screen) and clears again on the next
+    /// success, matching Android's auto refresh.
     func reloadQuietly() async {
         guard !reloading else { return }
         reloading = true
         defer { reloading = false }
         do {
             let fresh = try await repository.refresh()
+            loadError = nil
             guard !fresh.spaces.isEmpty else { return }
             let currentId = snapshot.spaces.indices.contains(selectedIndex)
                 ? snapshot.spaces[selectedIndex].id
@@ -312,8 +326,16 @@ final class BrowserModel {
             persistSelectedSpace()
             considerReviewPrompt()
         } catch {
+            // No banner and no spinner (that is the quiet part), but not
+            // invisible: the dock line offers the retry.
+            if Self.isCancellation(error) {
+                loadError = String(localized: "error.interrupted")
+            } else {
+                loadError = error.zenUserMessage
+            }
             Self.log.error("quiet reload failed: \(String(describing: error), privacy: .public)")
         }
+        await drainQueuedReloads()
     }
 
     /// Returning to the foreground (e.g. after sharing via the share

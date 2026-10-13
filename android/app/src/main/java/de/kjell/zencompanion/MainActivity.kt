@@ -126,14 +126,15 @@ private fun SpacesBrowserRoot(viewModel: AppViewModel) {
     val context = LocalContext.current
 
     // Returning to the foreground (e.g. after sharing from another app)
-    // refreshes what's on screen, like iOS. The first start is the cold
-    // launch, which bootstrap already loads.
+    // refreshes what's on screen, like iOS. Composition — and with it this
+    // observer — only starts once the window attaches, which happens after
+    // the activity's own ON_START, so the cold launch never reaches this
+    // observer and the bootstrap fetch stays the only one.
     val lifecycleOwner = context as? LifecycleOwner
     DisposableEffect(lifecycleOwner) {
-        var startedOnce = false
         val observer = LifecycleEventObserver { _, event ->
             if (event != Lifecycle.Event.ON_START) return@LifecycleEventObserver
-            if (startedOnce) viewModel.reload() else startedOnce = true
+            viewModel.reload()
         }
         lifecycleOwner?.lifecycle?.addObserver(observer)
         onDispose { lifecycleOwner?.lifecycle?.removeObserver(observer) }

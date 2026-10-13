@@ -305,6 +305,20 @@ object SpacesSyncService {
         return byBucket
     }
 
+    /**
+     * Deterministic tab-title order for tabs that arrive outside `children`
+     * order: fixed-locale case folding plus the tab id as tie-breaker, the
+     * same rule as the Swift `byStableTitle`. Map iteration order (network
+     * arrival order on some builds) must not leak into equal titles, and the
+     * device locale must not pick the order.
+     */
+    internal fun compareByStableTitle(a: ZenSpaces.ZenTab, b: ZenSpaces.ZenTab): Int {
+        val la = a.title.lowercase(java.util.Locale.ROOT)
+        val lb = b.title.lowercase(java.util.Locale.ROOT)
+        if (la != lb) return la.compareTo(lb)
+        return a.id.compareTo(b.id)
+    }
+
     internal fun makeSpace(
         record: ZenSpaces.ZenSpaceRecord,
         allTabs: Map<String, ZenSpaces.ZenTabRecord>,
@@ -352,7 +366,7 @@ object SpacesSyncService {
         fun sortedTabItems(records: List<ZenSpaces.ZenTabRecord>): List<ZenSpaces.ZenItem> =
             records
                 .mapNotNull { makeTab(it) }
-                .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.title })
+                .sortedWith { a, b -> compareByStableTitle(a, b) }
                 .map { ZenSpaces.ZenItem.Tab(it) }
         pinnedItems.addAll(sortedTabItems(unplacedRecords.filter { !it.isNormalTab }))
         normalItems.addAll(sortedTabItems(unplacedRecords.filter { it.isNormalTab }))
@@ -470,7 +484,7 @@ object SpacesSyncService {
             allTabs.values
                 .filter { it.folderId == folder.folderId && !placed.contains(it.tabId) }
                 .mapNotNull { makeTab(it) }
-                .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.title })
+                .sortedWith { a, b -> compareByStableTitle(a, b) }
                 .forEach { tabs.add(it) }
         }
 

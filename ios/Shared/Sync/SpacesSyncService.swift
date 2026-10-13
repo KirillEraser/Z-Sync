@@ -252,6 +252,19 @@ enum SpacesSyncService {
         return byBucket
     }
 
+    /// Deterministic tab-title order for tabs that arrive outside `children`
+    /// order: fixed-locale case folding plus the tab id as tie-breaker, the
+    /// same rule as Android's `compareByStableTitle`. Dictionary iteration
+    /// order (randomized per process) must not leak into equal titles, and the
+    /// device locale must not pick the order: `localizedCaseInsensitiveCompare`
+    /// sorts "Ärger" before "azur", the fixed fold says the opposite.
+    private static func byStableTitle(_ a: ZenTab, _ b: ZenTab) -> Bool {
+        let la = a.title.lowercased(with: Locale(identifier: "en_US_POSIX"))
+        let lb = b.title.lowercased(with: Locale(identifier: "en_US_POSIX"))
+        if la != lb { return la < lb }
+        return a.id < b.id
+    }
+
     static func makeSpace(
         from record: ZenSpaceRecord,
         allTabs: [String: ZenTabRecord],
@@ -300,7 +313,7 @@ enum SpacesSyncService {
         func sortedTabItems(_ records: [ZenTabRecord]) -> [ZenItem] {
             records
                 .compactMap(makeTab)
-                .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+                .sorted(by: byStableTitle)
                 .map { ZenItem.tab($0) }
         }
         pinnedItems.append(contentsOf: sortedTabItems(unplacedRecords.filter { !$0.isNormalTab }))
@@ -419,7 +432,7 @@ enum SpacesSyncService {
             let extraTabs = allTabs.values
                 .filter { $0.folderId == folder.folderId && !placed.contains($0.tabId) }
                 .compactMap(makeTab)
-                .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+                .sorted(by: byStableTitle)
             tabs.append(contentsOf: extraTabs)
         }
 
