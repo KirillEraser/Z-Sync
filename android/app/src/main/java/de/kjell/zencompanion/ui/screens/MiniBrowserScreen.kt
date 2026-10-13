@@ -126,6 +126,12 @@ fun MiniBrowserScreen(
 
     DisposableEffect(Unit) {
         onDispose {
+            // This WebView is destroyed with the composition, so a posted
+            // document.title lookup would never call back and the deferred
+            // save would never reach the repository. Withdraw the live lookup
+            // first; the save falls back to the title captured when the
+            // banner opened.
+            viewModel.documentTitle = { null }
             viewModel.commitPendingPinSave()
         }
     }
