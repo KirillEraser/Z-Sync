@@ -21,11 +21,13 @@ class BrowserLinkPolicyTests {
         scheme: String?,
         isRedirect: Boolean = false,
         hasGesture: Boolean = true,
+        isMainFrame: Boolean = true,
         resolvedPackage: String? = youtubePackage,
     ): BrowserLinkAction = browserLinkAction(
         scheme = scheme,
         isRedirect = isRedirect,
         hasGesture = hasGesture,
+        isMainFrame = isMainFrame,
         resolvedPackage = resolvedPackage,
         browserPackages = browsers,
         ownPackage = ownPackage,
@@ -89,6 +91,26 @@ class BrowserLinkPolicyTests {
                 scheme,
                 BrowserLinkAction.BLOCK,
                 action(scheme, hasGesture = false, resolvedPackage = null),
+            )
+        }
+    }
+
+    /**
+     * A tap inside an iframe must not leave the app; only a tap in the main
+     * frame may. Mirrors iOS `BrowserNavigationPolicy.opensExternally`.
+     */
+    @Test
+    fun appSchemesOpenOnlyFromAMainFrameTap() {
+        for (scheme in listOf("mailto", "tel", "intent", "youtube")) {
+            assertEquals(
+                scheme,
+                BrowserLinkAction.OPEN_EXTERNALLY,
+                action(scheme, hasGesture = true, isMainFrame = true, resolvedPackage = null),
+            )
+            assertEquals(
+                scheme,
+                BrowserLinkAction.BLOCK,
+                action(scheme, hasGesture = true, isMainFrame = false, resolvedPackage = null),
             )
         }
     }

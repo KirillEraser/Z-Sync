@@ -19,13 +19,20 @@ internal fun browserLinkAction(
     scheme: String?,
     isRedirect: Boolean,
     hasGesture: Boolean,
+    isMainFrame: Boolean,
     resolvedPackage: String?,
     browserPackages: Set<String>,
     ownPackage: String,
 ): BrowserLinkAction {
     val normalizedScheme = scheme?.lowercase()
     if (normalizedScheme == null || normalizedScheme !in WEB_SCHEMES) {
-        return if (hasGesture) BrowserLinkAction.OPEN_EXTERNALLY else BrowserLinkAction.BLOCK
+        // Another app opens only from a tap in the main frame; a tap inside an
+        // iframe is dropped, matching the iOS policy.
+        return if (hasGesture && isMainFrame) {
+            BrowserLinkAction.OPEN_EXTERNALLY
+        } else {
+            BrowserLinkAction.BLOCK
+        }
     }
     if (normalizedScheme != "http" && normalizedScheme != "https") {
         return BrowserLinkAction.LOAD_IN_WEBVIEW

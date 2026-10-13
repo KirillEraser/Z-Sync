@@ -111,6 +111,7 @@ internal fun MiniBrowserWebView(
                             scheme = request.url.scheme,
                             isRedirect = request.isRedirect,
                             hasGesture = request.hasGesture(),
+                            isMainFrame = request.isForMainFrame,
                             resolvedPackage = resolveHandlerPackage(context, request.url),
                             browserPackages = browserPackages(context),
                             ownPackage = context.packageName,
