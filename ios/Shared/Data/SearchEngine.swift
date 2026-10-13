@@ -29,9 +29,10 @@ public struct SearchEngine: Identifiable, Hashable, Codable, Sendable {
 }
 
 extension SearchEngine {
-    /// RFC 3986 unreserved characters. `.urlQueryAllowed` keeps `&`, `+`, `=`
-    /// and `#`, which split or rewrite the query: "AT&T" searched for "AT"
-    /// and "c++" for "c". Android's `URLEncoder` already escapes them.
+    /// RFC 3986 unreserved characters. `.urlQueryAllowed` kept `&`, `+` and
+    /// `=`, which split or rewrite the query: "AT&T" searched for "AT" and
+    /// "c++" for "c". (`#` was already escaped, and space was already `%20`.)
+    /// Android's `URLEncoder` escapes all of them.
     static let queryValueAllowed = CharacterSet(
         charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"
     )
