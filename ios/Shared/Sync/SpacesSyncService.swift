@@ -49,8 +49,7 @@ enum SpacesSyncService {
             cache(cached)
             return cached
         }
-        let client = try await AccountStore.connect()
-        return try await loadSnapshot(client: client)
+        return try await AccountStore.withClient { try await loadSnapshot(client: $0) }
     }
 
     static func loadSnapshot(client: SyncClient) async throws -> ZenSnapshot {
@@ -456,8 +455,9 @@ enum SpacesSyncService {
         if AccountStore.isDemo {
             return addTabLocally(url: url, title: title, to: spaceId, folderId: folderId, kind: kind)
         }
-        let client = try await AccountStore.connect()
-        return try await addTab(client: client, url: url, title: title, to: spaceId, folderId: folderId, kind: kind)
+        return try await AccountStore.withClient {
+            try await addTab(client: $0, url: url, title: title, to: spaceId, folderId: folderId, kind: kind)
+        }
     }
 
     @discardableResult
@@ -841,8 +841,7 @@ enum SpacesSyncService {
             NotificationCenter.default.post(name: .zenCompanionSnapshotStale, object: nil)
             return
         }
-        let client = try await AccountStore.connect()
-        try await deleteTab(client: client, id: id)
+        try await AccountStore.withClient { try await deleteTab(client: $0, id: id) }
     }
 
     static func deleteTab(client: SyncClient, id: String) async throws {
@@ -880,8 +879,7 @@ enum SpacesSyncService {
             NotificationCenter.default.post(name: .zenCompanionSnapshotStale, object: nil)
             return
         }
-        let client = try await AccountStore.connect()
-        try await renameTab(client: client, id: id, label: label)
+        try await AccountStore.withClient { try await renameTab(client: $0, id: id, label: label) }
     }
 
     static func renameTab(client: SyncClient, id: String, label: String) async throws {
@@ -911,8 +909,7 @@ enum SpacesSyncService {
             NotificationCenter.default.post(name: .zenCompanionSnapshotStale, object: nil)
             return
         }
-        let client = try await AccountStore.connect()
-        try await moveTab(client: client, id: id, toFolder: target, in: spaceId)
+        try await AccountStore.withClient { try await moveTab(client: $0, id: id, toFolder: target, in: spaceId) }
     }
 
     static func moveTab(
@@ -950,8 +947,7 @@ enum SpacesSyncService {
             NotificationCenter.default.post(name: .zenCompanionSnapshotStale, object: nil)
             return
         }
-        let client = try await AccountStore.connect()
-        try await pinTab(client: client, id: id, in: spaceId)
+        try await AccountStore.withClient { try await pinTab(client: $0, id: id, in: spaceId) }
     }
 
     static func pinTab(client: SyncClient, id: String, in spaceId: String) async throws {
@@ -1590,13 +1586,13 @@ enum SpacesSyncService {
     static func cache(_ snapshot: ZenSnapshot) {
         guard let data = try? JSONEncoder().encode(snapshot) else { return }
         var url = cacheURL
-        do {
-            // Device-local only (SPEC §8): keep tab data out of iCloud backups.
-            var values = URLResourceValues()
-            values.isExcludedFromBackup = true
-            try url.setResourceValues(values)
-        } catch {}
-        try? data.write(to: cacheURL, options: [.atomic, .completeFileProtection])
+        try? data.write(to: url, options: [.atomic, .completeFileProtection])
+        // Device-local only (SPEC §8): keep tab data out of iCloud backups. Set
+        // after the write: the attribute needs an existing file, and an atomic
+        // write replaces the file and drops it.
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        try? url.setResourceValues(values)
         AppGroup.defaults.set(snapshot.fetchedAt.timeIntervalSince1970, forKey: "spacesCacheTime")
     }
 
@@ -1618,7 +1614,10 @@ enum SpacesSyncService {
     /// Loads cached data immediately, then refreshes over the network.
     @discardableResult
     static func refresh() async throws -> ZenSnapshot {
+        let started = AccountStore.currentGeneration
         let fresh = try await loadSnapshot()
+        // A sign-out during the fetch already deleted the cache; don't refill it.
+        guard AccountStore.isCurrent(started) else { throw SyncError.notSignedIn }
         cache(fresh)
         return fresh
     }

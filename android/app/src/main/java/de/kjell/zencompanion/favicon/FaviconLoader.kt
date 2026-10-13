@@ -68,6 +68,17 @@ object FaviconLoader {
         }
     }
 
+    /** Drops every cached icon and the site index, in memory and on disk (sign-out). */
+    fun clear() {
+        memoryCache.evictAll()
+        synchronized(this) {
+            failures.clear()
+            resolved.clear()
+            indexLoaded = true
+            diskDir?.listFiles()?.forEach { it.delete() }
+        }
+    }
+
     /** iOS `NSCache` parity: a ~20 MB byte budget, not a fixed count. */
     private val memoryCache = object : LruCache<String, Bitmap>(20 * 1024 * 1024) {
         override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount.coerceAtLeast(1)
