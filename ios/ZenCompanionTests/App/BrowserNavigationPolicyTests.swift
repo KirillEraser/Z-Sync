@@ -45,4 +45,22 @@ final class BrowserNavigationPolicyTests: XCTestCase {
     func testUrlWithoutSchemeStaysInWebView() {
         XCTAssertTrue(BrowserNavigationPolicy.loadsInWebView(URL(string: "example.com")!))
     }
+
+    func testNewWindowKeepsHttpAndHttpsInTheSameTab() {
+        XCTAssertEqual(
+            BrowserNavigationPolicy.sameTabURL(URL(string: "http://www.org.chemie.uni-muenchen.de/ac/kornath/flusssaeure-hf/"))?.absoluteString,
+            "http://www.org.chemie.uni-muenchen.de/ac/kornath/flusssaeure-hf/"
+        )
+        XCTAssertEqual(
+            BrowserNavigationPolicy.sameTabURL(URL(string: "https://www.google.com/goto?url=abc"))?.absoluteString,
+            "https://www.google.com/goto?url=abc"
+        )
+    }
+
+    func testBlankNewWindowDoesNotReplaceThePage() {
+        XCTAssertNil(BrowserNavigationPolicy.sameTabURL(URL(string: "about:blank")))
+        XCTAssertNil(BrowserNavigationPolicy.sameTabURL(URL(string: "about:blank/")))
+        XCTAssertNil(BrowserNavigationPolicy.sameTabURL(URL(string: "javascript:void(0)")))
+        XCTAssertNil(BrowserNavigationPolicy.sameTabURL(nil))
+    }
 }
