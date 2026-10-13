@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Web pages may load plain http. Sign-in and sync stay on https. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">firefox.com</domain>
+        <domain includeSubdomains="true">mozilla.com</domain>
+    </domain-config>
+</network-security-config>
