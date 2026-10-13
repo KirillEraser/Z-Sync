@@ -61,7 +61,7 @@ internal fun MiniBrowserWebView(
                     setSupportZoom(true)
                     builtInZoomControls = true
                     displayZoomControls = false
-                    mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+                    mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
                     // target=_blank and window.open do nothing unless this is on.
                     setSupportMultipleWindows(true)
                     javaScriptCanOpenWindowsAutomatically = true
@@ -124,14 +124,19 @@ internal fun MiniBrowserWebView(
                             scheme = request.url.scheme,
                             isRedirect = request.isRedirect,
                             hasGesture = request.hasGesture(),
+                            isMainFrame = request.isForMainFrame,
                             resolvedPackage = resolveHandlerPackage(context, request.url),
                             browserPackages = browserPackages(context),
                             ownPackage = context.packageName,
                         )
-                        if (action == BrowserLinkAction.OPEN_EXTERNALLY) {
-                            return openURLExternally(context, request.url)
+                        return when (action) {
+                            BrowserLinkAction.OPEN_EXTERNALLY -> {
+                                openURLExternally(context, request.url)
+                                true
+                            }
+                            BrowserLinkAction.BLOCK -> true
+                            BrowserLinkAction.LOAD_IN_WEBVIEW -> false
                         }
-                        return false
                     }
                 }
                 // The WebView has no download UI; hand web files to the system,
@@ -185,7 +190,11 @@ internal fun MiniBrowserWebView(
 
                 val loadTarget = formatBrowserInput(initialUrl ?: "")
                 if (loadTarget.isNotEmpty()) {
-                    loadUrl(loadTarget)
+                    if (isWebScheme(Uri.parse(loadTarget).scheme)) {
+                        loadUrl(loadTarget)
+                    } else {
+                        openURLExternally(ctx, loadTarget)
+                    }
                 }
                 onWebViewCreated(this)
             }
