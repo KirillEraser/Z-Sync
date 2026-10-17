@@ -24,6 +24,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import de.kjell.zencompanion.data.EssentialsColumns
 import de.kjell.zencompanion.sync.ZenSpaces
 import de.kjell.zencompanion.ui.components.EssentialsGrid
 import de.kjell.zencompanion.ui.motion.DampingSwitchSelect
@@ -35,10 +36,13 @@ import kotlin.math.abs
 internal fun SpacesPager(
     spaces: List<ZenSpaces.ZenSpace>,
     essentialsBySpace: Map<String, List<ZenSpaces.ZenTab>>,
+    essentialsColumns: EssentialsColumns,
     selectedIndex: Int,
     onSelect: (Int) -> Unit,
     onDeleteTab: (String) -> Unit,
     onRenameTab: (String, String) -> Unit,
+    onMoveTab: (String, String, String?) -> Unit,
+    onPinTab: (String, String) -> Unit,
     onOpenUrl: (String, String?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -104,11 +108,14 @@ internal fun SpacesPager(
             space = spaces[index],
             index = index,
             essentials = spaceEssentials,
+            essentialsColumns = essentialsColumns,
             prevSharesEssentials = prevSharesEssentials,
             nextSharesEssentials = nextSharesEssentials,
             pagerState = pagerState,
             onDeleteTab = onDeleteTab,
             onRenameTab = onRenameTab,
+            onMoveTab = { tabId, folderId -> onMoveTab(tabId, spaces[index].id, folderId) },
+            onPinTab = { tabId -> onPinTab(tabId, spaces[index].id) },
             onOpenUrl = onOpenUrl,
         )
     }
@@ -167,11 +174,14 @@ internal fun SpacePageContainer(
     space: ZenSpaces.ZenSpace,
     index: Int,
     essentials: List<ZenSpaces.ZenTab>,
+    essentialsColumns: EssentialsColumns,
     prevSharesEssentials: Boolean,
     nextSharesEssentials: Boolean,
     pagerState: PagerState,
     onDeleteTab: (String) -> Unit,
     onRenameTab: (String, String) -> Unit,
+    onMoveTab: (String, String?) -> Unit,
+    onPinTab: (String) -> Unit,
     onOpenUrl: (String, String?) -> Unit,
 ) {
     var pageWidthPx by remember { mutableStateOf(0f) }
@@ -200,6 +210,7 @@ internal fun SpacePageContainer(
             ) {
                 EssentialsGrid(
                     tabs = essentials,
+                    columns = essentialsColumns,
                     modifier = Modifier.fillMaxWidth(),
                     onOpenUrl = onOpenUrl,
                     onRenameTab = onRenameTab,
@@ -211,6 +222,8 @@ internal fun SpacePageContainer(
             space = space,
             onDeleteTab = onDeleteTab,
             onRenameTab = onRenameTab,
+            onMoveTab = onMoveTab,
+            onPinTab = onPinTab,
             onOpenUrl = onOpenUrl,
         )
     }

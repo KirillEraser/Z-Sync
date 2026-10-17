@@ -15,6 +15,8 @@ struct MiniBrowserView: View {
     let initialURL: URL?
     let space: ZenSpace
     let allSpaces: [ZenSpace]
+    /// Full-screen covers have no drag-to-dismiss. The phone sheet leaves this off.
+    var showsToolbarClose: Bool
     var onDismiss: () -> Void
 
     @Environment(\.colorScheme) private var scheme
@@ -32,11 +34,13 @@ struct MiniBrowserView: View {
         initialTitle: String?,
         space: ZenSpace,
         allSpaces: [ZenSpace],
+        showsToolbarClose: Bool = false,
         onDismiss: @escaping () -> Void
     ) {
         self.initialURL = initialURL
         self.space = space
         self.allSpaces = allSpaces
+        self.showsToolbarClose = showsToolbarClose
         self.onDismiss = onDismiss
         _model = State(initialValue: MiniBrowserModel(initialURL: initialURL))
         _startsInSearch = State(initialValue: initialURL == nil)
@@ -178,6 +182,7 @@ struct MiniBrowserView: View {
                         .padding(.horizontal, 16)
                         .padding(.top, 16)
                         .padding(.bottom, 12)
+                        .modifier(QuickBrowserWindowControlsDodge(active: showsToolbarClose))
                         .overlay(alignment: .bottom) {
                             if #available(iOS 26.0, *) {
                                 EmptyView()
@@ -226,6 +231,9 @@ struct MiniBrowserView: View {
                         ControlGroup {
                             toolbarSafariButton
                             toolbarPinButton
+                            if showsToolbarClose {
+                                toolbarCloseButton
+                            }
                         }
                     }
                 } else {
@@ -235,6 +243,9 @@ struct MiniBrowserView: View {
                         Spacer()
                         toolbarSafariButton
                         toolbarPinButton
+                        if showsToolbarClose {
+                            toolbarCloseButton
+                        }
                     }
                 }
             }
@@ -375,6 +386,13 @@ struct MiniBrowserView: View {
         .accessibilityLabel(Text("browser.pin_to_space"))
     }
 
+    private var toolbarCloseButton: some View {
+        Button(action: onDismiss) {
+            Image(systemName: "xmark")
+        }
+        .accessibilityLabel(Text("common.close"))
+    }
+
     private func submitAddress() {
         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
             isAddressFocused = false
@@ -471,5 +489,19 @@ struct MiniBrowserView: View {
             insertion: .move(edge: .bottom).combined(with: .opacity).combined(with: .scale(scale: 0.95)),
             removal: .move(edge: .bottom).combined(with: .opacity)
         ))
+    }
+}
+
+/// iPadOS 26 draws window controls over the top-leading corner. The phone
+/// sheet never asks for this; insets are zero outside a resizable window.
+private struct QuickBrowserWindowControlsDodge: ViewModifier {
+    var active: Bool
+
+    func body(content: Content) -> some View {
+        if active {
+            content.containerCornerOffsetCompat(.top)
+        } else {
+            content
+        }
     }
 }

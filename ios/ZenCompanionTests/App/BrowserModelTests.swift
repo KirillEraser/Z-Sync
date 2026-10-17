@@ -150,6 +150,117 @@ final class BrowserModelTests: XCTestCase {
         XCTAssertEqual(repo.refreshCount, 2, "manual refresh must hit the network again after the wait")
     }
 
+    /// A reload asked for mid-fetch (e.g. a write's stale signal) runs after
+    /// the current fetch instead of being dropped.
+    func testReloadDuringReloadRunsAgainAfterward() async {
+        let repo = FakeSpacesRepository()
+        repo.cached = snapshot(["a"])
+        repo.refreshResult = .success(snapshot(["a"]))
+        repo.blockRefresh = true
+        let model = makeModel(repo)
+
+        let inFlight = Task { await model.reload() }
+        while !repo.didBlockRefresh { await Task.yield() }
+        await model.reload()
+        XCTAssertEqual(repo.refreshCount, 1)
+
+        repo.blockRefresh = false
+        repo.releaseRefresh()
+        await inFlight.value
+
+        XCTAssertEqual(repo.refreshCount, 2, "the queued reload must run once the first finishes")
+    }
+
+    /// A stale signal that lands during a quiet (foreground) reload must run
+    /// once that fetch finishes too: `reloadQuietly` holds `reloading` during
+    /// its fetch, so the queue must be drained there as well, not only in
+    /// `reload()`.
+    func testStaleSignalDuringQuietReloadRunsAfterward() async {
+        let repo = FakeSpacesRepository()
+        repo.cached = snapshot(["a"])
+        repo.refreshResult = .success(snapshot(["a"]))
+        repo.blockRefresh = true
+        let model = makeModel(repo)
+
+        // Foreground refresh with cached spaces on screen: the quiet path.
+        let quiet = Task { await model.reloadQuietly() }
+        while !repo.didBlockRefresh { await Task.yield() }
+        // A write's stale signal lands mid-fetch.
+        await model.reload()
+        XCTAssertEqual(repo.refreshCount, 1)
+
+        repo.blockRefresh = false
+        repo.releaseRefresh()
+        await quiet.value
+
+        XCTAssertEqual(repo.refreshCount, 2, "the queued reload must run once the quiet fetch finishes")
+    }
+
+    /// An interrupted fetch holds `reloading` through its 700 ms retry pause
+    /// (like Android), so a reload arriving inside the pause queues and runs
+    /// after the retry instead of fetching alongside it.
+    func testInterruptedRetryDoesNotFetchAlongsideANewerReload() async {
+        let repo = FakeSpacesRepository()
+        repo.cached = snapshot(["a"])
+        repo.refreshResult = .failure(URLError(.cancelled))
+        let model = makeModel(repo)
+
+        // Fetch 1 is interrupted: the model pauses 700 ms before retrying.
+        let interrupted = Task { await model.reload() }
+        while model.loadError == nil { await Task.yield() }
+
+        // A newer reload arrives inside the pause and blocks mid-fetch.
+        repo.refreshResult = .success(snapshot(["a"]))
+        repo.blockRefresh = true
+        let newer = Task { await model.reload() }
+
+        // Let the pause expire so the retry path runs; the gate keeps the
+        // newer fetch in flight until then.
+        try? await Task.sleep(for: .milliseconds(1_500))
+        repo.blockRefresh = false
+        repo.releaseRefresh()
+        await interrupted.value
+        await newer.value
+
+        XCTAssertEqual(repo.refreshCount, 3, "the newer reload must still run")
+        XCTAssertEqual(
+            repo.maxConcurrentRefreshes, 1,
+            "the interrupted retry must queue behind the newer reload, not fetch alongside it"
+        )
+    }
+
+    /// A failed quiet (foreground) refresh surfaces in the status line like
+    /// every other refresh failure, and a later success clears it.
+    func testQuietReloadFailureSurfacesAndClearsInStatusLine() async {
+        let repo = FakeSpacesRepository()
+        repo.refreshResult = .failure(URLError(.timedOut))
+        let model = makeModel(repo)
+        model.snapshot = snapshot(["a"])
+
+        await model.reloadQuietly()
+
+        XCTAssertNotNil(model.loadError, "a failed foreground refresh must be visible in the dock line")
+
+        repo.refreshResult = .success(snapshot(["a", "b"]))
+        await model.reloadQuietly()
+
+        XCTAssertNil(model.loadError, "a successful foreground refresh must clear the line")
+    }
+
+    /// A failed delete says so in the status line instead of failing silently.
+    func testFailedDeleteShowsMessage() async {
+        let repo = FakeSpacesRepository()
+        repo.deleteError = ZenCompanion.SyncError.conflict
+        let model = makeModel(repo)
+
+        await model.deleteTab(id: "t1")
+
+        XCTAssertEqual(
+            model.deleteError,
+            "\(String(localized: "home.delete_failed")) \(String(localized: "error.conflict"))"
+        )
+    }
+
     func testZeroSpacesClearsError() async {
         let repo = FakeSpacesRepository()
         repo.refreshResult = .failure(URLError(.timedOut))
@@ -246,8 +357,8 @@ final class BrowserModelTests: XCTestCase {
     }
     // MARK: - Toolbar placement
 
-    func testToolbarPlacementDefaultsToTopAndPrefersAppGroup() {
-        XCTAssertEqual(makeModel(FakeSpacesRepository()).toolbarPlacement, .top)
+    func testToolbarPlacementDefaultsToBottomAndPrefersAppGroup() {
+        XCTAssertEqual(makeModel(FakeSpacesRepository()).toolbarPlacement, .bottom)
 
         let appGroupWins = FakePreferences()
         appGroupWins.setString(ToolbarPlacement.bottom.rawValue, PreferenceKeys.toolbarPlacement, scope: .standard)
@@ -269,19 +380,84 @@ final class BrowserModelTests: XCTestCase {
         let prefs = FakePreferences()
         prefs.setString("sideways", PreferenceKeys.toolbarPlacement, scope: .appGroup)
 
-        XCTAssertEqual(makeModel(FakeSpacesRepository(), preferences: prefs).toolbarPlacement, .top)
+        XCTAssertEqual(makeModel(FakeSpacesRepository(), preferences: prefs).toolbarPlacement, .bottom)
     }
 
     func testSetToolbarPlacementMirrorsChoiceWithoutPersisting() {
         let prefs = FakePreferences()
         let model = makeModel(FakeSpacesRepository(), preferences: prefs)
 
-        model.setToolbarPlacement(.bottom)
+        model.setToolbarPlacement(.top)
 
-        XCTAssertEqual(model.toolbarPlacement, .bottom)
+        XCTAssertEqual(model.toolbarPlacement, .top)
         // Persistence is SettingsModel's job; the browser model only mirrors.
         XCTAssertFalse(prefs.hasObject(PreferenceKeys.toolbarPlacement, scope: .appGroup))
         XCTAssertFalse(prefs.hasObject(PreferenceKeys.toolbarPlacement, scope: .standard))
+    }
+
+    // MARK: - Open into search
+
+    private func searchPreferences(enabled: Bool = true) -> FakePreferences {
+        let prefs = FakePreferences()
+        prefs.setBool(enabled, PreferenceKeys.openIntoSearch, scope: .standard)
+        return prefs
+    }
+
+    func testLaunchWithCachedSpacesOpensSearchWhenEnabled() async {
+        let repo = FakeSpacesRepository()
+        repo.cached = snapshot(["a"])
+        repo.refreshResult = .success(snapshot(["a"]))
+        let model = makeModel(repo, preferences: searchPreferences())
+
+        await model.initialLoad()
+
+        XCTAssertTrue(model.searchOnOpenPending)
+    }
+
+    func testLaunchStaysOnSpacesWhenSettingIsOff() async {
+        let repo = FakeSpacesRepository()
+        repo.cached = snapshot(["a"])
+        repo.refreshResult = .success(snapshot(["a"]))
+        let model = makeModel(repo, preferences: searchPreferences(enabled: false))
+
+        await model.initialLoad()
+        model.sceneEnteredBackground()
+        await model.sceneBecameActive()
+
+        XCTAssertFalse(model.searchOnOpenPending)
+    }
+
+    func testFirstLaunchWithoutCacheShowsSpacesThenSearchesOnNextOpen() async {
+        let repo = FakeSpacesRepository()
+        repo.refreshResult = .success(snapshot(["a"]))
+        let model = makeModel(repo, preferences: searchPreferences())
+
+        await model.initialLoad()
+        XCTAssertFalse(model.searchOnOpenPending)
+
+        // Control Center or a system alert: active again without backgrounding.
+        await model.sceneBecameActive()
+        XCTAssertFalse(model.searchOnOpenPending)
+
+        model.sceneEnteredBackground()
+        await model.sceneBecameActive()
+        XCTAssertTrue(model.searchOnOpenPending)
+    }
+
+    func testSearchOpensOncePerTripToTheForeground() async {
+        let repo = FakeSpacesRepository()
+        repo.cached = snapshot(["a"])
+        repo.refreshResult = .success(snapshot(["a"]))
+        let model = makeModel(repo, preferences: searchPreferences())
+
+        // scenePhase can report active before the cached spaces load.
+        await model.sceneBecameActive()
+        await model.initialLoad()
+        XCTAssertTrue(model.searchOnOpenPending)
+        model.consumeSearchOnOpen()
+
+        await model.sceneBecameActive()
+        XCTAssertFalse(model.searchOnOpenPending)
     }
 
     // MARK: - Rename
@@ -356,6 +532,63 @@ final class BrowserModelTests: XCTestCase {
         XCTAssertNil(pinnedTab(model.snapshot, id: "t1")?.staticLabel)
     }
 
+    // MARK: - Pin
+
+    func testPinTabMovesRowToPinnedSectionAndForwardsWrite() async {
+        let repo = FakeSpacesRepository()
+        let model = makeModel(repo)
+        model.snapshot = ZenCompanion.ZenSnapshot(
+            spaces: [
+                ZenCompanion.ZenSpace(
+                    id: "s1",
+                    name: "One",
+                    tabs: [.tab(ZenCompanion.ZenTab(
+                        id: "n1",
+                        url: "https://n.example",
+                        title: "Normal",
+                        staticLabel: "Keep"
+                    ))]
+                ),
+            ],
+            fetchedAt: Date(timeIntervalSince1970: 0)
+        )
+
+        await model.pinTab(id: "n1", in: "s1")
+
+        let space = model.snapshot.spaces.first
+        XCTAssertEqual(space?.tabs.map(\.id), [])
+        XCTAssertEqual(space?.pinned.map(\.id), ["n1"])
+        XCTAssertEqual(pinnedTab(model.snapshot, id: "n1")?.staticLabel, "Keep")
+        XCTAssertEqual(repo.pinnedTabs.count, 1)
+        XCTAssertEqual(repo.pinnedTabs.first?.id, "n1")
+        XCTAssertEqual(repo.pinnedTabs.first?.spaceId, "s1")
+    }
+
+    func testPinTabReloadsAndSnapsBackWhenWriteFails() async {
+        let repo = FakeSpacesRepository()
+        let original = ZenCompanion.ZenSnapshot(
+            spaces: [
+                ZenCompanion.ZenSpace(
+                    id: "s1",
+                    name: "One",
+                    tabs: [.tab(ZenCompanion.ZenTab(id: "n1", url: "https://n.example", title: "Normal"))]
+                ),
+            ],
+            fetchedAt: Date(timeIntervalSince1970: 0)
+        )
+        repo.refreshResult = .success(original)
+        repo.pinError = URLError(.badServerResponse)
+        let model = makeModel(repo)
+        model.snapshot = original
+
+        await model.pinTab(id: "n1", in: "s1")
+
+        XCTAssertEqual(repo.pinnedTabs.count, 1)
+        XCTAssertEqual(repo.refreshCount, 1, "a failed pin must reload so the row snaps back")
+        XCTAssertEqual(model.snapshot.spaces.first?.tabs.map(\.id), ["n1"])
+        XCTAssertTrue(model.snapshot.spaces.first?.pinned.isEmpty ?? false)
+    }
+
     private func pinnedTab(_ snapshot: ZenCompanion.ZenSnapshot, id: String) -> ZenCompanion.ZenTab? {
         snapshot.spaces.first?.pinned.compactMap { item -> ZenCompanion.ZenTab? in
             if case .tab(let tab) = item { return tab }
@@ -371,14 +604,22 @@ private final class FakeSpacesRepository: SpacesRepository {
     var cached: ZenCompanion.ZenSnapshot?
     var refreshResult: Result<ZenCompanion.ZenSnapshot, Error> = .failure(URLError(.badServerResponse))
     private(set) var refreshCount = 0
+    /// Highest number of refreshes in flight at once — pins that queued
+    /// reloads never fetch alongside the one that queued them.
+    private(set) var maxConcurrentRefreshes = 0
+    private var inFlightRefreshes = 0
     private(set) var deletedTabIds: [String] = []
     private(set) var renamedTabs: [(id: String, label: String)] = []
+    private(set) var pinnedTabs: [(id: String, spaceId: String)] = []
     var blockRefresh = false
     private(set) var didBlockRefresh = false
-    private var refreshContinuation: CheckedContinuation<Void, Never>?
+    private var refreshWaiters: [CheckedContinuation<Void, Never>] = []
     var blockRename = false
     private(set) var didBlockRename = false
     private var renameContinuation: CheckedContinuation<Void, Never>?
+    /// When set, `pinTab` records the call and then throws it, so the model's
+    /// failure rollback can be exercised.
+    var pinError: Error?
 
     func cachedSnapshot() -> ZenCompanion.ZenSnapshot? { cached }
 
@@ -386,9 +627,12 @@ private final class FakeSpacesRepository: SpacesRepository {
 
     func refresh() async throws -> ZenCompanion.ZenSnapshot {
         refreshCount += 1
+        inFlightRefreshes += 1
+        maxConcurrentRefreshes = max(maxConcurrentRefreshes, inFlightRefreshes)
+        defer { inFlightRefreshes -= 1 }
         if blockRefresh {
             await withCheckedContinuation { continuation in
-                refreshContinuation = continuation
+                refreshWaiters.append(continuation)
                 didBlockRefresh = true
             }
         }
@@ -397,7 +641,12 @@ private final class FakeSpacesRepository: SpacesRepository {
 
     func deleteCachedSnapshot() { cached = nil }
 
-    func deleteTab(id: String) async throws { deletedTabIds.append(id) }
+    var deleteError: Error?
+
+    func deleteTab(id: String) async throws {
+        deletedTabIds.append(id)
+        if let deleteError { throw deleteError }
+    }
 
     func renameTab(id: String, label: String) async throws {
         renamedTabs.append((id, label))
@@ -409,9 +658,17 @@ private final class FakeSpacesRepository: SpacesRepository {
         }
     }
 
+    func moveTab(id: String, toFolder folderId: String?, in spaceId: String) async throws {}
+
+    func pinTab(id: String, in spaceId: String) async throws {
+        pinnedTabs.append((id, spaceId))
+        if let pinError { throw pinError }
+    }
+
     func releaseRefresh() {
-        refreshContinuation?.resume()
-        refreshContinuation = nil
+        let waiters = refreshWaiters
+        refreshWaiters = []
+        waiters.forEach { $0.resume() }
     }
 
     func releaseRename() {

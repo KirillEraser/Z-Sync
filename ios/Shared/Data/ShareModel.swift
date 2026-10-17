@@ -215,7 +215,15 @@ final class ShareModel {
     func refreshSpaces() async {
         do {
             let fresh = try await session.refresh()
-            guard !fresh.spaces.isEmpty else { return }
+            guard !fresh.spaces.isEmpty else {
+                // Nothing cached and nothing synced: say so instead of
+                // spinning forever.
+                if spaces.isEmpty {
+                    error = session.noSpacesErrorText()
+                    phase = .failed
+                }
+                return
+            }
             spaces = fresh.spaces
             if !fresh.spaces.contains(where: { $0.id == destination.spaceId }) {
                 destination = lastDestination(fallback: fresh.spaces)
@@ -226,7 +234,9 @@ final class ShareModel {
                       PinDestinationModel.folderName(folderId: folderId, in: currentSpace) == nil {
                 destination = PinDestination(spaceId: destination.spaceId)
             }
-            if phase != .saved {
+            // A refresh that lands mid-save must not re-enable the button,
+            // and one that lands after a failed write must not hide the error.
+            if phase != .saved && phase != .saving && phase != .failed {
                 phase = .pick
             }
         } catch {
@@ -238,7 +248,7 @@ final class ShareModel {
     }
 
     func save() async {
-        guard let url else { return }
+        guard let url, phase != .saving, phase != .saved else { return }
         if spaces.isEmpty {
             error = session.noSpacesErrorText()
             phase = .failed

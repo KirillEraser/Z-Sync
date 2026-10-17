@@ -3,6 +3,7 @@ package de.kjell.zencompanion.ui.screens
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,10 +24,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import de.kjell.zencompanion.R
+import de.kjell.zencompanion.data.EssentialsColumns
 import de.kjell.zencompanion.data.ToolbarPlacement
 import de.kjell.zencompanion.sync.ZenSpaces
 import de.kjell.zencompanion.ui.BrowserState
@@ -47,11 +53,14 @@ fun SpacesBrowserScreen(
     isDemo: Boolean,
     state: BrowserState,
     essentialsGrouping: ZenSpaces.EssentialsGrouping,
+    essentialsColumns: EssentialsColumns,
     toolbarPlacement: ToolbarPlacement,
     onSelectSpace: (Int) -> Unit,
     onRefresh: () -> Unit,
     onDeleteTab: (String) -> Unit,
     onRenameTab: (String, String) -> Unit,
+    onMoveTab: (String, String, String?) -> Unit,
+    onPinTab: (String, String) -> Unit,
     onOpenAccount: () -> Unit,
     onOpenBrowser: (url: String?, title: String?) -> Unit = { _, _ -> },
     onOpenActivity: () -> Unit = {},
@@ -75,6 +84,8 @@ fun SpacesBrowserScreen(
             onOpenBrowser = onOpenBrowser,
             onOpenActivity = onOpenActivity,
             onOpenAccount = onOpenAccount,
+            // Toward the screen edge when the bar is the last row.
+            bottomPadding = if (toolbarPlacement == ToolbarPlacement.BOTTOM) 4.dp else 6.dp,
         )
     }
 
@@ -151,22 +162,28 @@ fun SpacesBrowserScreen(
                         SpacesPager(
                             spaces = spaces,
                             essentialsBySpace = essentialsBySpace,
+                            essentialsColumns = essentialsColumns,
                             selectedIndex = state.selectedIndex,
                             onSelect = onSelectSpace,
                             onDeleteTab = onDeleteTab,
                             onRenameTab = onRenameTab,
+                            onMoveTab = onMoveTab,
+                            onPinTab = onPinTab,
                             onOpenUrl = { url, title -> onOpenBrowser(url, title) },
                             modifier = Modifier.fillMaxSize(),
                         )
                     }
                 }
 
-                // Bottom: Space Switcher (+ action bar when placed low) + disclaimer
+                // Bottom: Space Switcher (+ action bar when placed low). The
+                // disclaimer that used to sit here lives in Settings (About);
+                // repeating it on the home screen only cost a row of height.
                 if (spaces.isNotEmpty()) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .navigationBarsPadding(),
+                            .navigationBarsPadding()
+                            .padding(bottom = 4.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
                         SpaceSwitcher(
@@ -177,12 +194,7 @@ fun SpacesBrowserScreen(
                         if (toolbarPlacement == ToolbarPlacement.BOTTOM) {
                             actionBar()
                         }
-                        Text(
-                            text = stringResource(R.string.home_disclaimer),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
-                            modifier = Modifier.padding(bottom = 6.dp),
-                        )
+                        StatusLine(state = state, onRetry = onRefresh)
                     }
                 } else {
                     if (toolbarPlacement == ToolbarPlacement.BOTTOM) {
@@ -220,6 +232,37 @@ fun SpacesBrowserScreen(
                 showSyncSetup = false
                 onRefresh()
             },
+        )
+    }
+}
+
+/**
+ * A line at the bottom of the dock, shown only when a delete or a refresh
+ * over cached spaces failed, so sync problems are visible without a banner.
+ * Mirrors iOS `statusLine`.
+ */
+@Composable
+private fun StatusLine(state: BrowserState, onRetry: () -> Unit) {
+    val ink = MaterialTheme.colorScheme.onSurface
+    val deleteError = state.deleteErrorRes
+    when {
+        deleteError != null -> Text(
+            text = stringResource(R.string.home_delete_failed) + " " + stringResource(deleteError),
+            style = MaterialTheme.typography.labelMedium,
+            color = ink.copy(alpha = 0.7f),
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 6.dp)
+                .semantics { liveRegion = LiveRegionMode.Polite },
+        )
+        state.loadErrorRes != null && !state.loading -> Text(
+            text = stringResource(R.string.home_refresh_failed),
+            style = MaterialTheme.typography.labelMedium,
+            color = ink.copy(alpha = 0.55f),
+            modifier = Modifier
+                .clickable(role = Role.Button, onClick = onRetry)
+                .padding(horizontal = 20.dp, vertical = 6.dp),
         )
     }
 }

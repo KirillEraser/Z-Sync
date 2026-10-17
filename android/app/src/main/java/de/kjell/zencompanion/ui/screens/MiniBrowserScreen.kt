@@ -1,6 +1,9 @@
 package de.kjell.zencompanion.ui.screens
 
+import android.net.Uri
+import de.kjell.zencompanion.ui.components.openURLExternally
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.webkit.WebView
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateColorAsState
@@ -48,9 +51,11 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import de.kjell.zencompanion.R
 import de.kjell.zencompanion.data.SaveKind
@@ -58,6 +63,7 @@ import de.kjell.zencompanion.sync.ZenSpaces
 import de.kjell.zencompanion.ui.BrowserRepository
 import de.kjell.zencompanion.ui.browser.MiniBrowserViewModel
 import de.kjell.zencompanion.ui.components.PinDestinationPicker
+import de.kjell.zencompanion.ui.theme.InkLight
 import de.kjell.zencompanion.util.Haptics
 import de.kjell.zencompanion.util.PageTitle
 import kotlin.coroutines.resume
@@ -126,13 +132,21 @@ fun MiniBrowserScreen(
 
     DisposableEffect(Unit) {
         onDispose {
+            // This WebView is destroyed with the composition, so a posted
+            // document.title lookup would never call back and the deferred
+            // save would never reach the repository. Withdraw the live lookup
+            // first; the save falls back to the title captured when the
+            // banner opened.
+            viewModel.documentTitle = { null }
             viewModel.commitPendingPinSave()
         }
     }
 
     // Auto-focus URL bar if opened without initial URL
     LaunchedEffect(initialUrl) {
-        if (initialUrl.isNullOrEmpty()) {
+        // After a configuration change the page is already open: don't
+        // jump into the address bar again.
+        if (initialUrl.isNullOrEmpty() && viewModel.restoredUrl(launchKey) == null) {
             delay(200)
             focusRequester.requestFocus()
         }
@@ -156,9 +170,29 @@ fun MiniBrowserScreen(
         animationSpec = tween(300),
         label = "browserThemeColor",
     )
+    // The bars follow their own background, the page's color, not the app
+    // theme: a white page in dark mode still needs dark text and icons.
     val isDark = animatedBgColor.luminance() < 0.5f
-    val onBgColor = if (isDark) Color(0xFFF2F2F5) else MaterialTheme.colorScheme.onSurface
-    val onVariantBgColor = if (isDark) Color(0xFFB8B8C2) else MaterialTheme.colorScheme.onSurfaceVariant
+    val onBgColor = if (isDark) Color(0xFFF2F2F5) else InkLight
+    val onVariantBgColor = if (isDark) Color(0xFFB8B8C2) else InkLight.copy(alpha = 0.7f)
+
+    // The status and navigation bars sit on the same color. Restored on
+    // close, so the spaces screen keeps its own.
+    val view = LocalView.current
+    DisposableEffect(view, isDark) {
+        val window = (view.context as? Activity)?.window
+        val bars = window?.let { WindowCompat.getInsetsController(it, view) }
+        val lightStatusBars = bars?.isAppearanceLightStatusBars
+        val lightNavigationBars = bars?.isAppearanceLightNavigationBars
+        bars?.isAppearanceLightStatusBars = !isDark
+        bars?.isAppearanceLightNavigationBars = !isDark
+        onDispose {
+            if (bars != null && lightStatusBars != null && lightNavigationBars != null) {
+                bars.isAppearanceLightStatusBars = lightStatusBars
+                bars.isAppearanceLightNavigationBars = lightNavigationBars
+            }
+        }
+    }
 
     Surface(
         modifier = modifier.fillMaxSize(),
@@ -188,7 +222,12 @@ fun MiniBrowserScreen(
                 onSubmitAddress = { input ->
                     val target = viewModel.submitAddress(input)
                     if (target.isNotEmpty()) {
-                        webView?.loadUrl(target)
+                        // A typed mailto:/tel: is an explicit request to leave the browser.
+                        if (isWebScheme(Uri.parse(target).scheme)) {
+                            webView?.loadUrl(target)
+                        } else {
+                            openURLExternally(context, target)
+                        }
                     }
                     focusManager.clearFocus()
                     keyboardController?.hide()
@@ -202,7 +241,9 @@ fun MiniBrowserScreen(
                     .fillMaxWidth(),
             ) {
                 MiniBrowserWebView(
-                    initialUrl = initialUrl,
+                    // A recreated WebView (theme or font change) reopens the
+                    // page the user was on, not the one the browser opened with.
+                    initialUrl = viewModel.restoredUrl(launchKey) ?: initialUrl,
                     isAddressFocused = state.isAddressFocused,
                     onWebViewCreated = { webView = it },
                     onLoadingChange = viewModel::onLoadingChange,
@@ -297,8 +338,11 @@ fun MiniBrowserScreen(
 
                 // Normal-save fallback notice (same banner styling, anchored
                 // to the top so it never collides with the destination banner).
+                // Keep the last notice while it animates out.
+                var shownNotice by remember { mutableStateOf<MiniBrowserViewModel.Notice?>(null) }
+                state.notice?.let { shownNotice = it }
                 androidx.compose.animation.AnimatedVisibility(
-                    visible = state.fallbackNotice,
+                    visible = state.notice != null,
                     enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
                     exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(),
                     modifier = Modifier
@@ -323,8 +367,12 @@ fun MiniBrowserScreen(
                                 tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(20.dp),
                             )
+                            val notice = shownNotice
                             Text(
-                                text = stringResource(R.string.save_fallback_normal_off),
+                                text = listOfNotNull(
+                                    notice?.message?.let { stringResource(it) },
+                                    notice?.detail?.let { stringResource(it) },
+                                ).joinToString(" "),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurface,
                             )

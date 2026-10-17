@@ -42,12 +42,28 @@ final class SettingsModel {
         }
     }
 
-    /// Where the spaces screen's action bar sits: top (default) or bottom.
+    /// Where the spaces screen's action bar sits: bottom (default) or top.
     var toolbarPlacement: ToolbarPlacement {
         didSet {
             guard toolbarPlacement != oldValue else { return }
             preferences.setString(toolbarPlacement.rawValue, PreferenceKeys.toolbarPlacement, scope: .appGroup)
             preferences.setString(toolbarPlacement.rawValue, PreferenceKeys.toolbarPlacement, scope: .standard)
+        }
+    }
+
+    /// Open the mini-browser with the search field focused whenever the app
+    /// comes to the foreground. Off by default; read by `BrowserModel`.
+    var openIntoSearch: Bool {
+        didSet { preferences.setBool(openIntoSearch, PreferenceKeys.openIntoSearch, scope: .standard) }
+    }
+
+    /// How many essentials sit on one grid row: adaptive (default) or a fixed
+    /// 1–5. Read by `BrowserModel` for the start-page grid.
+    var essentialsColumns: EssentialsColumns {
+        didSet {
+            guard essentialsColumns != oldValue else { return }
+            preferences.setString(essentialsColumns.rawValue, PreferenceKeys.essentialsColumns, scope: .appGroup)
+            preferences.setString(essentialsColumns.rawValue, PreferenceKeys.essentialsColumns, scope: .standard)
         }
     }
 
@@ -72,6 +88,20 @@ final class SettingsModel {
         self.essentialsGrouping = Self.loadEssentialsGrouping(preferences)
         self.saveKind = Self.loadSaveKind(preferences)
         self.toolbarPlacement = Self.loadToolbarPlacement(preferences)
+        self.openIntoSearch = preferences.bool(PreferenceKeys.openIntoSearch, scope: .standard)
+        self.essentialsColumns = Self.loadEssentialsColumns(preferences)
+    }
+
+    /// AppGroup first, standard defaults fallback, `.automatic` default.
+    private static func loadEssentialsColumns(_ preferences: PreferencesStoring) -> EssentialsColumns {
+        let key = PreferenceKeys.essentialsColumns
+        if let raw = preferences.string(key, scope: .appGroup), let value = EssentialsColumns(rawValue: raw) {
+            return value
+        }
+        if let raw = preferences.string(key, scope: .standard), let value = EssentialsColumns(rawValue: raw) {
+            return value
+        }
+        return .automatic
     }
 
     private static func loadEssentialsGrouping(_ preferences: PreferencesStoring) -> EssentialsGrouping {
@@ -97,7 +127,7 @@ final class SettingsModel {
         return .pinned
     }
 
-    /// AppGroup first, standard defaults fallback, `.top` default.
+    /// AppGroup first, standard defaults fallback, `.bottom` default.
     private static func loadToolbarPlacement(_ preferences: PreferencesStoring) -> ToolbarPlacement {
         let key = PreferenceKeys.toolbarPlacement
         if let raw = preferences.string(key, scope: .appGroup), let value = ToolbarPlacement(rawValue: raw) {
@@ -106,7 +136,7 @@ final class SettingsModel {
         if let raw = preferences.string(key, scope: .standard), let value = ToolbarPlacement(rawValue: raw) {
             return value
         }
-        return .top
+        return .bottom
     }
 
     /// Validates and appends a custom engine, selecting it on success.

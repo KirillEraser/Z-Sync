@@ -22,11 +22,11 @@ import androidx.compose.material.icons.outlined.ArrowDropDown
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.GridView
+import androidx.compose.material.icons.outlined.Keyboard
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.SwapVert
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -46,12 +46,14 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import de.kjell.zencompanion.R
+import de.kjell.zencompanion.data.EssentialsColumns
 import de.kjell.zencompanion.data.SaveKind
 import de.kjell.zencompanion.data.SearchEngine
 import de.kjell.zencompanion.data.SearchEngines
 import de.kjell.zencompanion.data.ToolbarPlacement
 import de.kjell.zencompanion.sync.ZenSpaces
 import de.kjell.zencompanion.ui.PreferencesState
+import de.kjell.zencompanion.ui.theme.LiftCard
 import de.kjell.zencompanion.ui.theme.LocalZenColors
 
 @Composable
@@ -64,6 +66,7 @@ internal fun SettingsPreferencesSection(
     onSetAlwaysOpenExternally: (Boolean) -> Unit,
     onSetSaveKind: (SaveKind) -> Unit,
     onSetToolbarPlacement: (ToolbarPlacement) -> Unit,
+    onSetOpenIntoSearch: (Boolean) -> Unit,
     onOpenAdvanced: () -> Unit,
 ) {
     // Preferences Section
@@ -75,13 +78,7 @@ internal fun SettingsPreferencesSection(
             modifier = Modifier.padding(start = 4.dp),
         )
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-            ),
-            shape = MaterialTheme.shapes.medium,
-        ) {
+        LiftCard(modifier = Modifier.fillMaxWidth()) {
             var menuExpanded by remember { mutableStateOf(false) }
             val selectedEngine = preferences.searchEngine
             val alwaysOpenExternally = preferences.alwaysOpenExternally
@@ -208,6 +205,37 @@ internal fun SettingsPreferencesSection(
                 )
             }
 
+            HorizontalDivider(
+                modifier = Modifier.padding(horizontal = 16.dp),
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onSetOpenIntoSearch(!preferences.openIntoSearch) }
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Keyboard,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(22.dp),
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = stringResource(R.string.settings_open_into_search),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f),
+                )
+                androidx.compose.material3.Switch(
+                    checked = preferences.openIntoSearch,
+                    onCheckedChange = { onSetOpenIntoSearch(it) },
+                )
+            }
+
             // Save kind (pinned vs normal). Hidden when the browser version
             // never proved normal-tab support (`absent`).
             if (normalTabsCapability != ZenSpaces.NormalTabsCapability.ABSENT) {
@@ -253,13 +281,7 @@ internal fun SettingsPreferencesSection(
 
         // Action bar placement: above the essentials grid or below the space
         // switcher. Own card, under "Save shared tabs as".
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-            ),
-            shape = MaterialTheme.shapes.medium,
-        ) {
+        LiftCard(modifier = Modifier.fillMaxWidth()) {
             var placementMenuExpanded by remember { mutableStateOf(false) }
             val toolbarPlacement = preferences.toolbarPlacement
 
@@ -334,13 +356,7 @@ internal fun SettingsPreferencesSection(
         // Custom search engines: listed separately so they can be deleted
         // without opening the picker. Hidden until the user adds one.
         if (preferences.customSearchEngines.isNotEmpty()) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                ),
-                shape = MaterialTheme.shapes.medium,
-            ) {
+            LiftCard(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Text(
                         text = stringResource(R.string.settings_search_engine_custom_section),
@@ -377,14 +393,10 @@ internal fun SettingsPreferencesSection(
         }
 
         // Own card: Advanced is unrelated to the preferences above.
-        Card(
+        LiftCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 8.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-            ),
-            shape = MaterialTheme.shapes.medium,
         ) {
             Row(
                 modifier = Modifier
@@ -422,15 +434,18 @@ internal fun SettingsPreferencesSection(
 internal fun SettingsAdvancedScreen(
     preferences: PreferencesState,
     onSetEssentialsGrouping: (ZenSpaces.EssentialsGrouping) -> Unit,
+    onSetEssentialsColumns: (EssentialsColumns) -> Unit,
     onBack: () -> Unit,
     onDone: () -> Unit,
 ) {
     var groupingMenuExpanded by remember { mutableStateOf(false) }
+    var columnsMenuExpanded by remember { mutableStateOf(false) }
     val essentialsGrouping = preferences.essentialsGrouping
+    val essentialsColumns = preferences.essentialsColumns
 
     Column(
         Modifier
-            .fillMaxWidth()
+            .settingsSheetPage()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 24.dp)
             .padding(top = 28.dp, bottom = 28.dp),
@@ -466,13 +481,7 @@ internal fun SettingsAdvancedScreen(
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                ),
-                shape = MaterialTheme.shapes.medium,
-            ) {
+            LiftCard(modifier = Modifier.fillMaxWidth()) {
                 Box(modifier = Modifier.fillMaxWidth()) {
                     Row(
                         modifier = Modifier
@@ -548,6 +557,75 @@ internal fun SettingsAdvancedScreen(
                 modifier = Modifier.padding(start = 4.dp),
             )
         }
+
+        LiftCard(modifier = Modifier.fillMaxWidth()) {
+            Box(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { columnsMenuExpanded = true }
+                        .padding(horizontal = 16.dp, vertical = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.GridView,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(22.dp),
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = stringResource(R.string.settings_essentials_columns),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        text = essentialsColumns.label(),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Icon(
+                        imageVector = Icons.Outlined.ArrowDropDown,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+
+                DropdownMenu(
+                    expanded = columnsMenuExpanded,
+                    onDismissRequest = { columnsMenuExpanded = false },
+                ) {
+                    EssentialsColumns.entries.forEach { columns ->
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = columns.label(),
+                                    fontWeight = if (columns == essentialsColumns) FontWeight.SemiBold else FontWeight.Normal,
+                                    color = if (columns == essentialsColumns) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                )
+                            },
+                            trailingIcon = if (columns == essentialsColumns) {
+                                {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Check,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                }
+                            } else null,
+                            onClick = {
+                                onSetEssentialsColumns(columns)
+                                columnsMenuExpanded = false
+                            },
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -588,6 +666,13 @@ private fun ZenSpaces.EssentialsGrouping.labelRes(): Int = when (this) {
     ZenSpaces.EssentialsGrouping.AUTOMATIC -> R.string.settings_essentials_grouping_automatic
     ZenSpaces.EssentialsGrouping.CONTAINER_SPECIFIC -> R.string.settings_essentials_grouping_container_specific
     ZenSpaces.EssentialsGrouping.SHARED -> R.string.settings_essentials_grouping_shared
+}
+
+/** "Automatic", or the bare number of essentials per row. */
+@Composable
+private fun EssentialsColumns.label(): String = when (this) {
+    EssentialsColumns.AUTOMATIC -> stringResource(R.string.settings_essentials_columns_automatic)
+    else -> storageValue
 }
 
 private fun ToolbarPlacement.labelRes(): Int = when (this) {

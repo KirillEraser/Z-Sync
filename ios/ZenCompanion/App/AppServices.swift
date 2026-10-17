@@ -16,6 +16,8 @@ enum PreferenceKeys {
     static let essentialsGrouping = "essentials_grouping"
     static let saveKind = "save_kind"
     static let toolbarPlacement = "toolbar_placement"
+    static let openIntoSearch = "open_into_search"
+    static let essentialsColumns = "essentials_columns"
 }
 
 enum PreferenceScope {
@@ -63,6 +65,8 @@ protocol SpacesRepository {
     func deleteCachedSnapshot()
     func deleteTab(id: String) async throws
     func renameTab(id: String, label: String) async throws
+    func moveTab(id: String, toFolder folderId: String?, in spaceId: String) async throws
+    func pinTab(id: String, in spaceId: String) async throws
 }
 
 struct LiveSpacesRepository: SpacesRepository {
@@ -75,6 +79,12 @@ struct LiveSpacesRepository: SpacesRepository {
     func deleteTab(id: String) async throws { try await SpacesSyncService.deleteTab(id: id) }
     func renameTab(id: String, label: String) async throws {
         try await SpacesSyncService.renameTab(id: id, label: label)
+    }
+    func moveTab(id: String, toFolder folderId: String?, in spaceId: String) async throws {
+        try await SpacesSyncService.moveTab(id: id, toFolder: folderId, in: spaceId)
+    }
+    func pinTab(id: String, in spaceId: String) async throws {
+        try await SpacesSyncService.pinTab(id: id, in: spaceId)
     }
 }
 
@@ -216,7 +226,14 @@ struct LiveSessionSigningOut: SessionSigningOut {
             ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(),
             modifiedSince: Date.distantPast
         ) {}
+        if let account = AccountStore.load(), !account.isDemo {
+            let transport = AccountStore.transport
+            Task.detached(priority: .utility) {
+                try? await FxAClient(transport: transport).destroySession(sessionToken: account.sessionTokenHex)
+            }
+        }
         AccountStore.clear()
+        FaviconLoader.shared.removeAll()
         SpacesSyncService.deleteCachedSnapshot()
         NotificationCenter.default.post(name: .zenCompanionSignedOut, object: nil)
     }

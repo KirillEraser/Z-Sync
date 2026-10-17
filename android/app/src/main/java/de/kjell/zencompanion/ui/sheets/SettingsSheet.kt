@@ -41,13 +41,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import de.kjell.zencompanion.R
+import de.kjell.zencompanion.data.EssentialsColumns
 import de.kjell.zencompanion.data.SaveKind
 import de.kjell.zencompanion.data.SearchEngine
 import de.kjell.zencompanion.data.SearchEngineValidation
 import de.kjell.zencompanion.data.ToolbarPlacement
 import de.kjell.zencompanion.sync.ZenSpaces
 import de.kjell.zencompanion.ui.PreferencesState
+import de.kjell.zencompanion.ui.theme.LiftCard
 import de.kjell.zencompanion.ui.theme.LocalZenColors
+import de.kjell.zencompanion.ui.theme.liftBorder
 
 import androidx.compose.foundation.shape.RoundedCornerShape
 
@@ -73,8 +76,10 @@ fun SettingsSheet(
     onDeleteSearchEngine: (String) -> Unit,
     onSetAlwaysOpenExternally: (Boolean) -> Unit,
     onSetEssentialsGrouping: (ZenSpaces.EssentialsGrouping) -> Unit,
+    onSetEssentialsColumns: (EssentialsColumns) -> Unit,
     onSetSaveKind: (SaveKind) -> Unit,
     onSetToolbarPlacement: (ToolbarPlacement) -> Unit,
+    onSetOpenIntoSearch: (Boolean) -> Unit,
     onSignOut: () -> Unit,
     onDone: () -> Unit,
 ) {
@@ -152,6 +157,7 @@ fun SettingsSheet(
             SettingsAdvancedScreen(
                 preferences = preferences,
                 onSetEssentialsGrouping = onSetEssentialsGrouping,
+                onSetEssentialsColumns = onSetEssentialsColumns,
                 onBack = { showAdvanced = false },
                 onDone = onDone,
             )
@@ -169,7 +175,7 @@ fun SettingsSheet(
 
         Column(
             Modifier
-                .fillMaxWidth()
+                .settingsSheetPage()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp)
                 .padding(top = 28.dp, bottom = 28.dp),
@@ -213,14 +219,10 @@ fun SettingsSheet(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     // Left Card: Email + Person icon (~56dp height)
-                    Card(
+                    LiftCard(
                         modifier = Modifier
                             .weight(1f)
                             .height(if (isDemo) 64.dp else 56.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                        ),
-                        shape = MaterialTheme.shapes.medium,
                     ) {
                         Row(
                             modifier = Modifier
@@ -269,7 +271,8 @@ fun SettingsSheet(
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.6f),
                         ),
-                        shape = MaterialTheme.shapes.medium,
+                        shape = RoundedCornerShape(16.dp),
+                        border = liftBorder(),
                     ) {
                         Box(
                             modifier = Modifier.fillMaxSize(),
@@ -298,6 +301,7 @@ fun SettingsSheet(
                 onSetAlwaysOpenExternally = onSetAlwaysOpenExternally,
                 onSetSaveKind = onSetSaveKind,
                 onSetToolbarPlacement = onSetToolbarPlacement,
+                onSetOpenIntoSearch = onSetOpenIntoSearch,
                 onOpenAdvanced = { showAdvanced = true },
             )
 

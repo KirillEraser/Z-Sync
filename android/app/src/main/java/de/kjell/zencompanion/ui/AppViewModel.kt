@@ -9,6 +9,7 @@ import de.kjell.zencompanion.data.AccountStore
 import de.kjell.zencompanion.data.AppEvents
 import de.kjell.zencompanion.data.BrowserSettings
 import de.kjell.zencompanion.data.DemoCatalog
+import de.kjell.zencompanion.data.EssentialsColumns
 import de.kjell.zencompanion.data.SaveKind
 import de.kjell.zencompanion.data.SearchEngine
 import de.kjell.zencompanion.data.SearchEngines
@@ -28,9 +29,12 @@ import de.kjell.zencompanion.ui.screens.FxAWebLogin
 import de.kjell.zencompanion.util.FriendlyError
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -46,6 +50,8 @@ data class BrowserState(
     val zeroSpaces: Boolean = false,
     val showShareTip: Boolean = false,
     val syncSetupHintDismissed: Boolean = false,
+    /** Reason a delete just failed, shown briefly in the status line. */
+    @StringRes val deleteErrorRes: Int? = null,
 ) {
     /**
      * Setup card while spaces synced but nothing in them: pinned/normal tabs
@@ -102,6 +108,8 @@ interface BrowserRepository {
     ): SpacesSyncService.AddTabOutcome
     suspend fun deleteTab(id: String)
     suspend fun renameTab(id: String, label: String)
+    suspend fun moveTab(id: String, spaceId: String, folderId: String?)
+    suspend fun pinTab(id: String, spaceId: String)
     fun isDemo(): Boolean
     /** Global pinned/normal choice for newly saved tabs. */
     fun saveKind(): SaveKind
@@ -136,6 +144,14 @@ internal class AndroidBrowserRepository(private val context: Context) : BrowserR
         SpacesSyncService.renameTab(context, id, label)
     }
 
+    override suspend fun moveTab(id: String, spaceId: String, folderId: String?) = withContext(Dispatchers.IO) {
+        SpacesSyncService.moveTab(context, id, spaceId, folderId)
+    }
+
+    override suspend fun pinTab(id: String, spaceId: String) = withContext(Dispatchers.IO) {
+        SpacesSyncService.pinTab(context, id, spaceId)
+    }
+
     override fun isDemo(): Boolean = AccountStore.isDemo(context)
 
     override fun saveKind(): SaveKind = BrowserSettings.getSaveKind(context)
@@ -148,10 +164,14 @@ data class PreferencesState(
     val customSearchEngines: List<SearchEngine> = emptyList(),
     val alwaysOpenExternally: Boolean = false,
     val essentialsGrouping: ZenSpaces.EssentialsGrouping = ZenSpaces.EssentialsGrouping.AUTOMATIC,
+    /** How many essentials share one grid row: adaptive (default) or a fixed 1-5. */
+    val essentialsColumns: EssentialsColumns = EssentialsColumns.AUTOMATIC,
     /** Pinned (default) or normal tab for tabs saved from share/mini browser. */
     val saveKind: SaveKind = SaveKind.PINNED,
-    /** Where the action bar sits: above the essentials grid (default) or below the switcher. */
-    val toolbarPlacement: ToolbarPlacement = ToolbarPlacement.TOP,
+    /** Where the action bar sits: below the switcher (default) or above the essentials grid. */
+    val toolbarPlacement: ToolbarPlacement = ToolbarPlacement.BOTTOM,
+    /** Open a new search tab whenever the app comes to the foreground. */
+    val openIntoSearch: Boolean = false,
 )
 
 /**
@@ -164,8 +184,10 @@ interface PreferencesRepository {
     fun setCustomSearchEngines(engines: List<SearchEngine>)
     fun setAlwaysOpenExternally(enabled: Boolean)
     fun setEssentialsGrouping(grouping: ZenSpaces.EssentialsGrouping)
+    fun setEssentialsColumns(columns: EssentialsColumns)
     fun setSaveKind(kind: SaveKind)
     fun setToolbarPlacement(placement: ToolbarPlacement)
+    fun setOpenIntoSearch(enabled: Boolean)
     fun syncSetupHintDismissed(): Boolean
     fun setSyncSetupHintDismissed(dismissed: Boolean)
     fun didShowShareExtensionTip(): Boolean
@@ -184,8 +206,10 @@ internal class AndroidPreferencesRepository(private val context: Context) : Pref
         essentialsGrouping = ZenSpaces.EssentialsGrouping.fromStorage(
             BrowserSettings.getEssentialsGrouping(context),
         ),
+        essentialsColumns = BrowserSettings.getEssentialsColumns(context),
         saveKind = BrowserSettings.getSaveKind(context),
         toolbarPlacement = BrowserSettings.getToolbarPlacement(context),
+        openIntoSearch = BrowserSettings.getOpenIntoSearch(context),
     )
 
     override fun setSearchEngine(engine: SearchEngine) = SearchEngines.set(context, engine)
@@ -198,10 +222,16 @@ internal class AndroidPreferencesRepository(private val context: Context) : Pref
     override fun setEssentialsGrouping(grouping: ZenSpaces.EssentialsGrouping) =
         BrowserSettings.setEssentialsGrouping(context, grouping.storageValue)
 
+    override fun setEssentialsColumns(columns: EssentialsColumns) =
+        BrowserSettings.setEssentialsColumns(context, columns)
+
     override fun setSaveKind(kind: SaveKind) = BrowserSettings.setSaveKind(context, kind)
 
     override fun setToolbarPlacement(placement: ToolbarPlacement) =
         BrowserSettings.setToolbarPlacement(context, placement)
+
+    override fun setOpenIntoSearch(enabled: Boolean) =
+        BrowserSettings.setOpenIntoSearch(context, enabled)
 
     override fun syncSetupHintDismissed(): Boolean =
         onboardingPrefs().getBoolean(KEY_DISMISSED_SYNC_SETUP, false)
@@ -267,6 +297,10 @@ class AppViewModel(
     internal val browserRepository: BrowserRepository = AndroidBrowserRepository(appContext),
     private val preferencesRepository: PreferencesRepository = AndroidPreferencesRepository(appContext),
     private val activityRepository: ActivityRepository = AndroidActivityRepository(appContext),
+    /** Ends the FxA session on the server at sign-out; replaceable in tests. */
+    private val revokeSession: suspend (String) -> Unit = { token ->
+        FxAClient(transport = AccountStore.authTransport).destroySession(token)
+    },
 ) : ViewModel() {
     // Loaded synchronously at creation so the first composed frame already
     // shows the right screen — no sign-in flash on cold start.
@@ -287,12 +321,24 @@ class AppViewModel(
     private val _reviewRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val reviewRequests: SharedFlow<Unit> = _reviewRequests
 
+    // Set when the app opens with "Open into search" on; the spaces screen
+    // consumes it by opening a new tab.
+    private val _searchOnOpenPending = MutableStateFlow(false)
+    val searchOnOpenPending: StateFlow<Boolean> = _searchOnOpenPending
+
     private var reloadJob: Job? = null
+    /** A reload asked for while one was running; it runs right after. */
+    private var reloadQueued = false
+    private var activityJob: Job? = null
     private var reviewJob: Job? = null
     private var reloading = false
     private var bootstrapped = false
     private var reviewArmedThisProcess = false
     private var reviewWaitElapsed = false
+
+    // True from process start and after each trip to the background, until
+    // the next open has been considered for "Open into search".
+    private var searchOnOpenArmed = true
 
     private fun BrowserState.withCachedSnapshot(): BrowserState {
         if (_session.value == null) return this
@@ -378,11 +424,24 @@ class AppViewModel(
     }
 
     fun signOut() {
+        // A refresh or history load still in flight must not repopulate the
+        // signed-out app (AccountStore's generation check backs this up).
+        reloadJob?.cancel()
+        activityJob?.cancel()
+        val account = AccountStore.load(appContext)?.takeUnless { it.isDemo }
         AccountStore.clear(appContext)
         SnapshotCache.deleteCachedSnapshot(appContext)
         SnapshotCache.invalidateMemory()
+        FaviconLoader.clear()
         preferencesRepository.setSyncSetupHintDismissed(false)
         _browser.value = BrowserState()
+        _activity.value = ActivityState()
+        if (account != null) {
+            // Best effort, and not tied to this screen's lifetime.
+            CoroutineScope(Dispatchers.IO).launch {
+                runCatching { revokeSession(account.sessionTokenHex) }
+            }
+        }
         AppEvents.emitSignedOut()
     }
 
@@ -419,9 +478,14 @@ class AppViewModel(
         }
     }
 
-    /** Automatic refresh (app start, stale snapshot) — silent when content is visible. */
+    /** Automatic refresh (app start, foreground, stale snapshot) — silent when content is visible. */
     fun reload() {
-        if (reloading) return
+        if (reloading) {
+            // A write's stale signal landed mid-fetch: that fetch may predate
+            // the write, so fetch again once it finishes instead of dropping it.
+            reloadQueued = true
+            return
+        }
         reloadJob?.cancel()
         reloadJob = viewModelScope.launch { reloadInternal(retryAttempted = false, manual = false) }
     }
@@ -433,7 +497,18 @@ class AppViewModel(
      * stays invisible instead of spinning in the pull-to-refresh indicator.
      */
     private suspend fun reloadInternal(retryAttempted: Boolean, manual: Boolean) {
-        if (reloading) return
+        if (reloading) {
+            reloadQueued = true
+            return
+        }
+        reloadOnce(retryAttempted, manual)
+        while (reloadQueued) {
+            reloadQueued = false
+            reloadOnce(retryAttempted = false, manual = false)
+        }
+    }
+
+    private suspend fun reloadOnce(retryAttempted: Boolean, manual: Boolean) {
         reloading = true
         val showSpinner = manual || _browser.value.snapshot.spaces.isEmpty()
         try {
@@ -474,12 +549,15 @@ class AppViewModel(
         } catch (e: Exception) {
             when {
                 e is CancellationException && !retryAttempted -> {
+                    // A cancelled job (sign-out, a newer reload) stops here;
+                    // only an interrupted request is worth one retry.
+                    currentCoroutineContext().ensureActive()
                     _browser.value = _browser.value.copy(
                         loading = false,
                         loadErrorRes = de.kjell.zencompanion.R.string.error_interrupted,
                     )
                     delay(700)
-                    reloadInternal(retryAttempted = true, manual = manual)
+                    reloadOnce(retryAttempted = true, manual = manual)
                     return
                 }
                 else -> {
@@ -556,7 +634,25 @@ class AppViewModel(
 
     fun deleteTab(id: String) {
         viewModelScope.launch {
-            runCatching { browserRepository.deleteTab(id) }
+            try {
+                browserRepository.deleteTab(id)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                android.util.Log.e("SpacesSync", "delete failed: $e")
+                showDeleteError(FriendlyError.messageRes(e))
+            }
+        }
+    }
+
+    private var deleteErrorJob: Job? = null
+
+    private fun showDeleteError(@StringRes reason: Int) {
+        deleteErrorJob?.cancel()
+        _browser.value = _browser.value.copy(deleteErrorRes = reason)
+        deleteErrorJob = viewModelScope.launch {
+            delay(5_000)
+            _browser.value = _browser.value.copy(deleteErrorRes = null)
         }
     }
 
@@ -577,6 +673,46 @@ class AppViewModel(
         )
         viewModelScope.launch {
             runCatching { browserRepository.renameTab(id, label) }
+        }
+    }
+
+    fun moveTab(id: String, spaceId: String, folderId: String?) {
+        // Optimistic: the tab changes place before the conditional write and
+        // the follow-up reload. A failed write self-corrects on the next reload.
+        _browser.value = _browser.value.copy(
+            snapshot = SpacesSyncCacheOps.moveTab(
+                _browser.value.snapshot,
+                id,
+                folderId,
+                spaceId,
+                System.currentTimeMillis(),
+            ),
+        )
+        viewModelScope.launch {
+            // Put the tab back where the server has it instead of showing a
+            // move that never happened.
+            runCatching { browserRepository.moveTab(id, spaceId, folderId) }
+                .onFailure { if (it !is CancellationException) reload() }
+        }
+    }
+
+    fun pinTab(id: String, spaceId: String) {
+        // Optimistic: the row leaves the normal section and reappears at the
+        // space root of the pinned section before the conditional write. A
+        // failed write self-corrects on the next reload.
+        _browser.value = _browser.value.copy(
+            snapshot = SpacesSyncCacheOps.pinTab(
+                _browser.value.snapshot,
+                id,
+                spaceId,
+                System.currentTimeMillis(),
+            ),
+        )
+        viewModelScope.launch {
+            // Put the tab back in the normal section instead of showing a pin
+            // that never happened.
+            runCatching { browserRepository.pinTab(id, spaceId) }
+                .onFailure { if (it !is CancellationException) reload() }
         }
     }
 
@@ -629,6 +765,11 @@ class AppViewModel(
         _preferences.value = _preferences.value.copy(essentialsGrouping = grouping)
     }
 
+    fun setEssentialsColumns(columns: EssentialsColumns) {
+        preferencesRepository.setEssentialsColumns(columns)
+        _preferences.value = _preferences.value.copy(essentialsColumns = columns)
+    }
+
     fun setSaveKind(kind: SaveKind) {
         preferencesRepository.setSaveKind(kind)
         _preferences.value = _preferences.value.copy(saveKind = kind)
@@ -639,9 +780,36 @@ class AppViewModel(
         _preferences.value = _preferences.value.copy(toolbarPlacement = placement)
     }
 
+    fun setOpenIntoSearch(enabled: Boolean) {
+        preferencesRepository.setOpenIntoSearch(enabled)
+        _preferences.value = _preferences.value.copy(openIntoSearch = enabled)
+    }
+
+    /**
+     * The spaces screen started: on launch, or back from the background. Asks
+     * for a new tab once per open when the setting is on and there is a space
+     * to pin into, so a first launch without cached spaces shows the spaces.
+     */
+    fun appCameToForeground() {
+        if (!searchOnOpenArmed) return
+        searchOnOpenArmed = false
+        if (_preferences.value.openIntoSearch && _browser.value.snapshot.spaces.isNotEmpty()) {
+            _searchOnOpenPending.value = true
+        }
+    }
+
+    fun appWentToBackground() {
+        searchOnOpenArmed = true
+    }
+
+    fun consumeSearchOnOpen() {
+        _searchOnOpenPending.value = false
+    }
+
     /** Loads (or retries) the synced browsing history into [activity]. */
     fun loadActivity() {
-        viewModelScope.launch {
+        activityJob?.cancel()
+        activityJob = viewModelScope.launch {
             val current = _activity.value
             _activity.value = current.copy(loading = current.activity == null, errorRes = null)
             try {

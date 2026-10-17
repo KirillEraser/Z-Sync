@@ -149,6 +149,18 @@ final class FaviconLoader: @unchecked Sendable {
     private static let diskMaxBytes: Int64 = 40 * 1024 * 1024
     private static let diskTTL: TimeInterval = 30 * 24 * 60 * 60
 
+    /// Drops every cached icon and the site index, in memory and on disk (sign-out).
+    func removeAll() {
+        cache.removeAllObjects()
+        lock.withLock {
+            failed.removeAll()
+            resolved.removeAll()
+            indexLoaded = true
+            if let file = Self.indexFile { try? FileManager.default.removeItem(at: file) }
+        }
+        if let dir = Self.storeDir { try? FileManager.default.removeItem(at: dir) }
+    }
+
     func cached(pageURL: String, directURL: String?, dataURL: String? = nil) -> UIImage? {
         guard let key = FaviconResolver.cacheKey(pageURL: pageURL, directURL: directURL, dataURL: dataURL) else { return nil }
         return cache.object(forKey: key as NSString)

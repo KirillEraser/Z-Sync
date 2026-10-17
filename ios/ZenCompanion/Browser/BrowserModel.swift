@@ -4,8 +4,9 @@ import SwiftUI
 import os
 
 /// App-shell state owner for `SpacesBrowserView`: snapshot, pager indices,
-/// load lifecycle and the share/setup tips. The view keeps only navigation
-/// identity (`ActiveSheet`) and the notification/scenePhase observers.
+/// load lifecycle and the share/setup tips. The view keeps navigation
+/// identity (`ActiveSheet`), whether that browser was opened full screen,
+/// and the notification/scenePhase observers.
 @MainActor
 @Observable
 final class BrowserModel {
@@ -24,6 +25,8 @@ final class BrowserModel {
     var loading = false
     var loadError: String?
     var reloading = false
+    /// A reload asked for while one was running; it runs right after.
+    private var reloadQueued = false
     /// Dedicated zero-spaces state (desktop sync not enabled / empty account),
     /// distinct from network errors in `loadError`.
     var zeroSpaces = false
@@ -34,6 +37,9 @@ final class BrowserModel {
     /// Flipped once when the in-app review dialog should appear. The view
     /// consumes this via StoreKit's `requestReview` environment action.
     var reviewPromptPending = false
+    /// Flipped when the app opens (launch, or back from the background) with
+    /// "Open into search" on. The view consumes it by opening a new tab.
+    var searchOnOpenPending = false
 
     private let isDemo: Bool
     private let repository: SpacesRepository
@@ -46,6 +52,9 @@ final class BrowserModel {
     /// True after the first-look / next-open wait finished. Share-tip dismiss can
     /// then ask without skipping the wait.
     private var reviewWaitElapsed = false
+    /// True from launch and after each trip to the background, until the next
+    /// open has been considered for "Open into search".
+    private var searchOnOpenArmed = true
 
     init(
         account: AccountSnapshot,
@@ -62,9 +71,25 @@ final class BrowserModel {
             scope: .standard
         )
         self.toolbarPlacement = Self.loadToolbarPlacement(preferences)
+        self.essentialsColumns = Self.loadEssentialsColumns(preferences)
     }
 
-    /// AppGroup first, standard defaults fallback, `.top` default.
+    /// AppGroup first, standard defaults fallback, `.automatic` default.
+    private static func loadEssentialsColumns(_ preferences: PreferencesStoring) -> EssentialsColumns {
+        let key = PreferenceKeys.essentialsColumns
+        if preferences.hasObject(key, scope: .appGroup),
+           let raw = preferences.string(key, scope: .appGroup),
+           let value = EssentialsColumns(rawValue: raw) {
+            return value
+        }
+        if let raw = preferences.string(key, scope: .standard),
+           let value = EssentialsColumns(rawValue: raw) {
+            return value
+        }
+        return .automatic
+    }
+
+    /// AppGroup first, standard defaults fallback, `.bottom` default.
     private static func loadToolbarPlacement(_ preferences: PreferencesStoring) -> ToolbarPlacement {
         let key = PreferenceKeys.toolbarPlacement
         if preferences.hasObject(key, scope: .appGroup),
@@ -76,7 +101,7 @@ final class BrowserModel {
            let value = ToolbarPlacement(rawValue: raw) {
             return value
         }
-        return .top
+        return .bottom
     }
 
     // MARK: - Derived state
@@ -124,7 +149,7 @@ final class BrowserModel {
         return .automatic
     }
 
-    /// Where the action bar renders: the user's choice, else `.top`.
+    /// Where the action bar renders: the user's choice, else `.bottom`.
     ///
     /// Stored rather than re-read from `preferences` on every access so the
     /// spaces screen re-renders the moment the settings sheet changes it,
@@ -137,6 +162,17 @@ final class BrowserModel {
     func setToolbarPlacement(_ placement: ToolbarPlacement) {
         guard placement != toolbarPlacement else { return }
         toolbarPlacement = placement
+    }
+
+    /// How many essentials sit on one grid row. Stored for the same reason as
+    /// `toolbarPlacement`: the grid re-renders live while the sheet is open.
+    var essentialsColumns: EssentialsColumns
+
+    /// Mirrors a column choice made in the settings sheet. Persisting stays
+    /// with `SettingsModel`.
+    func setEssentialsColumns(_ columns: EssentialsColumns) {
+        guard columns != essentialsColumns else { return }
+        essentialsColumns = columns
     }
 
     /// Essentials to show above `space` under the current grouping.
@@ -206,7 +242,11 @@ final class BrowserModel {
             favicons.prefetch(from: cached)
             considerReviewPrompt()
         }
+        considerSearchOnOpen()
         await reload()
+        // A first launch without cached spaces shows the spaces once they
+        // arrive instead of covering them with a search sheet.
+        searchOnOpenArmed = false
     }
 
     /// Manual pull-to-refresh. Unlike a background reload this must always hit
@@ -222,7 +262,29 @@ final class BrowserModel {
     }
 
     func reload(retryAttempted: Bool = false) async {
-        guard !reloading else { return }
+        guard !reloading else {
+            // A write's stale signal landed mid-fetch: that fetch may predate
+            // the write, so fetch again once it finishes instead of dropping it.
+            reloadQueued = true
+            return
+        }
+        await reloadOnce(retryAttempted: retryAttempted)
+        await drainQueuedReloads()
+    }
+
+    /// Runs any reload queued while a fetch was in flight. `reloadOnce` and
+    /// `reloadQuietly` both hold `reloading` during their fetch, so the queue
+    /// must be drained after either — otherwise a stale signal that lands
+    /// during a quiet foreground refresh stays pending until an arbitrary
+    /// later reload happens to run it.
+    private func drainQueuedReloads() async {
+        while reloadQueued {
+            reloadQueued = false
+            await reloadOnce(retryAttempted: false)
+        }
+    }
+
+    private func reloadOnce(retryAttempted: Bool) async {
         reloading = true
         loading = true
         do {
@@ -260,10 +322,12 @@ final class BrowserModel {
             if Self.isCancellation(error) {
                 loadError = String(localized: "error.interrupted")
                 if !retryAttempted {
-                    reloading = false
+                    // Hold `reloading` through the pause (like Android): a reload
+                    // that arrives meanwhile queues and runs after the retry,
+                    // instead of fetching alongside it and racing the flag.
                     loading = false
                     try? await Task.sleep(for: .milliseconds(700))
-                    await reload(retryAttempted: true)
+                    await reloadOnce(retryAttempted: true)
                     return
                 }
             } else {
@@ -274,14 +338,17 @@ final class BrowserModel {
         loading = false
     }
 
-    /// Silent foreground refresh: swap in fresh data, never surface network
-    /// errors (the cached view stays as-is; the retry button covers failures).
+    /// Silent foreground refresh: swap in fresh data without a spinner. A
+    /// failure surfaces in the dock's status line like every other refresh
+    /// failure (the cached view stays on screen) and clears again on the next
+    /// success, matching Android's auto refresh.
     func reloadQuietly() async {
         guard !reloading else { return }
         reloading = true
         defer { reloading = false }
         do {
             let fresh = try await repository.refresh()
+            loadError = nil
             guard !fresh.spaces.isEmpty else { return }
             let currentId = snapshot.spaces.indices.contains(selectedIndex)
                 ? snapshot.spaces[selectedIndex].id
@@ -297,18 +364,47 @@ final class BrowserModel {
             persistSelectedSpace()
             considerReviewPrompt()
         } catch {
+            // No banner and no spinner (that is the quiet part), but not
+            // invisible: the dock line offers the retry.
+            if Self.isCancellation(error) {
+                loadError = String(localized: "error.interrupted")
+            } else {
+                loadError = error.zenUserMessage
+            }
             Self.log.error("quiet reload failed: \(String(describing: error), privacy: .public)")
         }
+        await drainQueuedReloads()
     }
 
     /// Returning to the foreground (e.g. after sharing via the share
     /// extension) refreshes what's on screen against the server.
     func sceneBecameActive() async {
+        considerSearchOnOpen()
         if snapshot.spaces.isEmpty {
             await reload()
         } else {
             await reloadQuietly()
         }
+    }
+
+    func sceneEnteredBackground() {
+        searchOnOpenArmed = true
+    }
+
+    // MARK: - Open into search
+
+    /// Asks the view for a new tab once per open, when the setting is on and
+    /// there is a space to pin into. Without spaces yet (scenePhase can fire
+    /// before the cache loads) the open stays armed for the next call.
+    func considerSearchOnOpen() {
+        guard searchOnOpenArmed, !snapshot.spaces.isEmpty else { return }
+        searchOnOpenArmed = false
+        guard preferences.bool(PreferenceKeys.openIntoSearch, scope: .standard) else { return }
+        searchOnOpenPending = true
+    }
+
+    func consumeSearchOnOpen() {
+        searchOnOpenPending = false
     }
 
     // MARK: - Tips
@@ -399,7 +495,26 @@ final class BrowserModel {
     // MARK: - Tab deletion
 
     func deleteTab(id: String) async {
-        try? await repository.deleteTab(id: id)
+        do {
+            try await repository.deleteTab(id: id)
+        } catch {
+            Self.log.error("delete failed: \(String(describing: error), privacy: .public)")
+            showDeleteError(error.zenUserMessage)
+        }
+    }
+
+    /// Shown in the status line for a few seconds after a failed delete.
+    private(set) var deleteError: String?
+    private var deleteErrorTask: Task<Void, Never>?
+
+    private func showDeleteError(_ message: String) {
+        deleteError = "\(String(localized: "home.delete_failed")) \(message)"
+        deleteErrorTask?.cancel()
+        deleteErrorTask = Task {
+            try? await Task.sleep(for: .seconds(5))
+            guard !Task.isCancelled else { return }
+            deleteError = nil
+        }
     }
 
     func renameTab(id: String, label: String) async {
@@ -411,6 +526,33 @@ final class BrowserModel {
         let normalized = SpacesSyncService.normalizedStaticLabel(label)
         snapshot = SpacesSyncEdits.renaming(id: id, staticLabel: normalized, in: snapshot)
         try? await repository.renameTab(id: id, label: label)
+    }
+
+    func moveTab(id: String, toFolder folderId: String?, in spaceId: String) async {
+        // Optimistic: the tab changes place before the conditional write and
+        // the follow-up reload. A failed write self-corrects on the next reload.
+        snapshot = SpacesSyncEdits.moving(id: id, folderId: folderId, in: spaceId, snapshot: snapshot)
+        do {
+            try await repository.moveTab(id: id, toFolder: folderId, in: spaceId)
+        } catch {
+            // Put the tab back where the server has it instead of showing a
+            // move that never happened.
+            await reload()
+        }
+    }
+
+    func pinTab(id: String, in spaceId: String) async {
+        // Optimistic: the row leaves the normal section and reappears at the
+        // space root of the pinned section before the conditional write. A
+        // failed write self-corrects on the next reload.
+        snapshot = SpacesSyncEdits.pinning(id: id, in: spaceId, snapshot: snapshot)
+        do {
+            try await repository.pinTab(id: id, in: spaceId)
+        } catch {
+            // Put the tab back in the normal section instead of showing a pin
+            // that never happened.
+            await reload()
+        }
     }
 
     private static func isCancellation(_ error: Error) -> Bool {

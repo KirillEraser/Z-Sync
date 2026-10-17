@@ -10,6 +10,8 @@ struct SettingsSheet: View {
     /// Called right after the user picks a toolbar placement, so the screen
     /// behind the sheet re-renders immediately instead of on dismissal.
     var onToolbarPlacementChange: (ToolbarPlacement) -> Void = { _ in }
+    /// Same for the essentials-per-row choice, which the start-page grid reads.
+    var onEssentialsColumnsChange: (EssentialsColumns) -> Void = { _ in }
 
     @Environment(\.dismiss) private var dismiss
     @State private var model = SettingsModel()
@@ -65,7 +67,7 @@ struct SettingsSheet: View {
                             }
                             .padding(.horizontal, 16)
                             .frame(height: 54)
-                            .background(Palette.lift(scheme), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .liftCard(scheme)
 
                             // Right: Sign Out Icon-Only Card (Narrower, compact sleek card)
                             Button(role: .destructive) {
@@ -76,9 +78,10 @@ struct SettingsSheet: View {
                                     .foregroundStyle(Color.red)
                                     .offset(x: 2.5) // Shifts icon right so left and right edge margins are identical
                                     .frame(width: 44, height: 54)
-                                    .background(Color.red.opacity(scheme == .dark ? 0.15 : 0.08), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                                    .background(Color.red.opacity(scheme == .dark ? 0.15 : 0.08), in: RoundedRectangle(cornerRadius: Palette.liftCornerRadius, style: .continuous))
+                                    .glassRim(cornerRadius: Palette.liftCornerRadius)
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(PressedButtonStyle())
                             .accessibilityLabel(Text("home.sign_out"))
                         }
 
@@ -137,7 +140,7 @@ struct SettingsSheet: View {
                                 .frame(minHeight: 54)
                                 .contentShape(Rectangle())
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(PressedButtonStyle())
 
                             Rectangle()
                                 .fill(Palette.ink(scheme).opacity(0.15))
@@ -158,8 +161,28 @@ struct SettingsSheet: View {
                             .tint(Palette.coral(scheme))
                             .padding(.horizontal, 16)
                             .frame(minHeight: 54)
+
+                            Rectangle()
+                                .fill(Palette.ink(scheme).opacity(0.15))
+                                .frame(height: 0.5)
+                                .padding(.leading, 44)
+
+                            Toggle(isOn: $model.openIntoSearch) {
+                                Label {
+                                    Text("settings.open_into_search")
+                                        .font(.system(size: 16, weight: .medium, design: .rounded))
+                                } icon: {
+                                    Image(systemName: "keyboard")
+                                        .font(.system(size: 15, weight: .semibold))
+                                        .foregroundStyle(Palette.ink(scheme).opacity(0.6))
+                                }
+                                .foregroundStyle(Palette.ink(scheme))
+                            }
+                            .tint(Palette.coral(scheme))
+                            .padding(.horizontal, 16)
+                            .frame(minHeight: 54)
                         }
-                        .background(Palette.lift(scheme), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .liftCard(scheme)
 
                         if normalTabsCapability != .absent {
                             VStack(spacing: 0) {
@@ -202,7 +225,7 @@ struct SettingsSheet: View {
                                 .padding(.horizontal, 16)
                                 .frame(minHeight: 54)
                             }
-                            .background(Palette.lift(scheme), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .liftCard(scheme)
                             .padding(.top, 8)
 
                             if normalTabsCapability == .disabled {
@@ -256,12 +279,16 @@ struct SettingsSheet: View {
                             .padding(.horizontal, 16)
                             .frame(minHeight: 54)
                         }
-                        .background(Palette.lift(scheme), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .liftCard(scheme)
                         .padding(.top, 8)
 
                         VStack(spacing: 0) {
                             NavigationLink {
-                                AdvancedSettingsView(model: model, scheme: scheme)
+                                AdvancedSettingsView(
+                                    model: model,
+                                    scheme: scheme,
+                                    onEssentialsColumnsChange: onEssentialsColumnsChange
+                                )
                             } label: {
                                 HStack {
                                     Label {
@@ -284,9 +311,9 @@ struct SettingsSheet: View {
                                 .frame(minHeight: 54)
                                 .contentShape(Rectangle())
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(PressedButtonStyle())
                         }
-                        .background(Palette.lift(scheme), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .liftCard(scheme)
                         .padding(.top, 8)
                     }
 
@@ -342,9 +369,9 @@ struct SettingsSheet: View {
                                 .frame(minHeight: 52)
                                 .contentShape(Rectangle())
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(PressedButtonStyle())
                         }
-                        .background(Palette.lift(scheme), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .liftCard(scheme)
                     }
 
                     // MARK: - 4. About & Links
@@ -402,18 +429,20 @@ struct SettingsSheet: View {
                             .padding(.horizontal, 16)
                             .frame(minHeight: 52)
                         }
-                        .background(Palette.lift(scheme), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .liftCard(scheme)
                     }
 
-                    // MARK: - 3. Footer Attributions & Disclaimer
+                    // MARK: - 3. Footer Disclaimer & Attributions
+                    // The disclaimer leads: it is the legal notice, so it sits
+                    // above the icon attribution and reads one step larger.
                     VStack(spacing: 6) {
+                        Text("home.disclaimer")
+                            .font(.system(size: 13, weight: .regular, design: .rounded))
+                            .foregroundStyle(Palette.ink(scheme).opacity(0.4))
+
                         Text("home.license_attribution")
                             .font(.system(size: 11, weight: .regular, design: .rounded))
                             .foregroundStyle(Palette.ink(scheme).opacity(0.35))
-
-                        Text("home.disclaimer")
-                            .font(.system(size: 10.5, weight: .regular, design: .rounded))
-                            .foregroundStyle(Palette.ink(scheme).opacity(0.28))
                     }
                     .multilineTextAlignment(.center)
                     .padding(.top, 6)
@@ -486,7 +515,7 @@ private struct SearchEngineSettingsView: View {
                 }
             }
         }
-        .background(Palette.lift(scheme), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .liftCard(scheme)
     }
 
     private func engineRow(_ engine: SearchEngine) -> some View {
@@ -507,7 +536,7 @@ private struct SearchEngineSettingsView: View {
                 }
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PressedButtonStyle())
 
             if !engine.isBuiltIn {
                 Button(role: .destructive) {
@@ -517,7 +546,7 @@ private struct SearchEngineSettingsView: View {
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(Color.red.opacity(0.8))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressedButtonStyle())
                 .accessibilityLabel(Text("Delete"))
             }
         }
@@ -547,8 +576,8 @@ private struct SearchEngineSettingsView: View {
             .frame(minHeight: 54)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .background(Palette.lift(scheme), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .buttonStyle(PressedButtonStyle())
+        .liftCard(scheme)
     }
 
 }
@@ -605,7 +634,7 @@ private struct AddSearchEngineView: View {
                 isURL: true
             )
         }
-        .background(Palette.lift(scheme), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .liftCard(scheme)
         .onChange(of: pastedURL) { _, newValue in
             guard let derived = SearchEngineTemplate.derive(fromPastedURL: newValue) else { return }
             draftTemplate = derived
@@ -629,7 +658,7 @@ private struct AddSearchEngineView: View {
                 isURL: true
             )
         }
-        .background(Palette.lift(scheme), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .liftCard(scheme)
     }
 
     private var addButton: some View {
@@ -648,7 +677,7 @@ private struct AddSearchEngineView: View {
                 .frame(height: 48)
                 .background(Palette.coral(scheme), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressedButtonStyle())
     }
 
     private var fieldDivider: some View {
@@ -721,10 +750,14 @@ private struct AddSearchEngineView: View {
 
 /// Rarely touched settings live here instead of the main page. Currently the
 /// essentials grouping override (SPEC §7.4): most users never need it because
-/// `.automatic` resolves the effective grouping on its own.
+/// `.automatic` resolves the effective grouping on its own. The
+/// essentials-per-row choice sits next to it.
 private struct AdvancedSettingsView: View {
     @Bindable var model: SettingsModel
     let scheme: ColorScheme
+    /// Mirrors the row choice into `BrowserModel` so the grid behind the sheet
+    /// updates immediately.
+    var onEssentialsColumnsChange: (EssentialsColumns) -> Void = { _ in }
 
     var body: some View {
         ScrollView {
@@ -755,12 +788,54 @@ private struct AdvancedSettingsView: View {
                     .padding(.horizontal, 16)
                     .frame(minHeight: 54)
                 }
-                .background(Palette.lift(scheme), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .liftCard(scheme)
 
                 Text("settings.essentials_grouping.caption")
                     .font(.system(size: 12, design: .rounded))
                     .foregroundStyle(Palette.ink(scheme).opacity(0.45))
                     .padding(.horizontal, 4)
+
+                VStack(spacing: 0) {
+                    HStack {
+                        Label {
+                            Text("settings.essentials_columns")
+                                .font(.system(size: 16, weight: .medium, design: .rounded))
+                        } icon: {
+                            Image(systemName: "rectangle.grid.3x2")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(Palette.ink(scheme).opacity(0.6))
+                        }
+                        .foregroundStyle(Palette.ink(scheme))
+
+                        Spacer()
+
+                        Menu {
+                            ForEach(EssentialsColumns.allCases) { columns in
+                                Button {
+                                    model.essentialsColumns = columns
+                                    onEssentialsColumnsChange(columns)
+                                } label: {
+                                    if model.essentialsColumns == columns {
+                                        Label(columns.title, systemImage: "checkmark")
+                                    } else {
+                                        Text(columns.title)
+                                    }
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 4) {
+                                Text(model.essentialsColumns.title)
+                                    .font(.system(size: 15.5, design: .rounded))
+                                Image(systemName: "chevron.up.chevron.down")
+                                    .font(.system(size: 10, weight: .semibold))
+                            }
+                            .foregroundStyle(Palette.ink(scheme).opacity(0.65))
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .frame(minHeight: 54)
+                }
+                .liftCard(scheme)
             }
             .padding(.horizontal, 20)
             .padding(.top, 16)

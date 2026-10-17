@@ -17,6 +17,7 @@ struct SpacesBrowserView: View {
     let account: AccountSnapshot
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.requestReview) private var requestReview
     @State private var model: BrowserModel
@@ -42,9 +43,46 @@ struct SpacesBrowserView: View {
     }
 
     @State private var activeSheet: ActiveSheet?
+    /// Locked when the browser opens. A later size-class change must not swap
+    /// the sheet and the cover, or the page reloads.
+    @State private var browserFillsScreen = false
     /// A pin inside the mini-browser (or a delete from it) fired while a sheet
     /// was up; refresh once the last sheet is gone.
     @State private var pendingStaleReload = false
+
+    /// Compact browser and the other sheets. A regular-width browser is left
+    /// out, so the sheet writing nil as it dismisses cannot clear the cover.
+    private var compactSheet: Binding<ActiveSheet?> {
+        Binding(
+            get: {
+                if browserFillsScreen, case .browser = activeSheet { return nil }
+                return activeSheet
+            },
+            set: { newValue in
+                if browserFillsScreen, case .browser = activeSheet, newValue == nil {
+                    return
+                }
+                if newValue == nil, case .browser = activeSheet {
+                    browserFillsScreen = false
+                }
+                activeSheet = newValue
+            }
+        )
+    }
+
+    private var fullScreenBrowser: Binding<BrowserTabSession?> {
+        Binding(
+            get: {
+                guard browserFillsScreen, case .browser(let session) = activeSheet else { return nil }
+                return session
+            },
+            set: { newValue in
+                guard newValue == nil, case .browser = activeSheet else { return }
+                activeSheet = nil
+                browserFillsScreen = false
+            }
+        )
+    }
 
     init(account: AccountSnapshot) {
         self.account = account
@@ -88,7 +126,7 @@ struct SpacesBrowserView: View {
 
                     if model.snapshot.spaces.isEmpty {
                         if placement == .top {
-                            actionBar(scheme: effectiveScheme)
+                            actionBar(scheme: effectiveScheme, placement: placement)
                         }
                         Spacer(minLength: 0)
                         if model.zeroSpaces {
@@ -102,11 +140,11 @@ struct SpacesBrowserView: View {
                         }
                         Spacer(minLength: 0)
                         if placement == .bottom {
-                            actionBar(scheme: effectiveScheme)
+                            actionBar(scheme: effectiveScheme, placement: placement)
                         }
                     } else {
                         if placement == .top {
-                            actionBar(scheme: effectiveScheme)
+                            actionBar(scheme: effectiveScheme, placement: placement)
                         }
 
                         if model.showSyncSetupHint {
@@ -149,6 +187,7 @@ struct SpacesBrowserView: View {
                                             nextSharesEssentials: nextSharesEssentials,
                                             scheme: spaceScheme,
                                             containerWidth: width,
+                                            essentialsColumns: model.essentialsColumns,
                                             onRefresh: {
                                                 await model.manualRefresh()
                                             },
@@ -160,6 +199,12 @@ struct SpacesBrowserView: View {
                                             },
                                             onRenameTab: { id, label in
                                                 await model.renameTab(id: id, label: label)
+                                            },
+                                            onMoveTab: { id, folderId in
+                                                await model.moveTab(id: id, toFolder: folderId, in: space.id)
+                                            },
+                                            onPinTab: { id in
+                                                await model.pinTab(id: id, in: space.id)
                                             }
                                         )
                                         .frame(width: width, height: height)
@@ -191,15 +236,16 @@ struct SpacesBrowserView: View {
                             selectedIndex: $model.selectedIndex,
                             scheme: effectiveScheme
                         )
+                        // Bottom placement stacks the action bar under the
+                        // switcher, so the switcher only needs air when it is
+                        // the last row (top placement).
+                        .padding(.bottom, placement == .top ? 4 : 0)
 
                         if placement == .bottom {
-                            actionBar(scheme: effectiveScheme)
+                            actionBar(scheme: effectiveScheme, placement: placement)
                         }
 
-                        Text("home.disclaimer")
-                            .font(.system(size: 10.5, weight: .regular, design: .rounded))
-                            .foregroundStyle(Palette.ink(effectiveScheme).opacity(0.3))
-                            .padding(.bottom, 6)
+                        statusLine(scheme: effectiveScheme)
                     }
                 }
             }
@@ -215,7 +261,7 @@ struct SpacesBrowserView: View {
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
-        .sheet(item: $activeSheet) { sheet in
+        .sheet(item: compactSheet) { sheet in
             switch sheet {
             case .account:
                 SettingsSheet(
@@ -223,21 +269,21 @@ struct SpacesBrowserView: View {
                     loadError: model.loadError,
                     scheme: scheme,
                     normalTabsCapability: model.snapshot.normalTabsCapability,
-                    onToolbarPlacementChange: { model.setToolbarPlacement($0) }
+                    onToolbarPlacementChange: { model.setToolbarPlacement($0) },
+                    onEssentialsColumnsChange: { model.setEssentialsColumns($0) }
                 )
-                .presentationDetents([.fraction(0.85), .large])
-                .presentationDragIndicator(.visible)
-            case .browser(let session):
-                MiniBrowserView(
-                    initialURL: session.url,
-                    initialTitle: session.initialTitle,
-                    space: session.space,
-                    allSpaces: model.snapshot.spaces,
-                    onDismiss: { activeSheet = nil }
-                )
+                // Single detent on purpose: with `[.fraction(0.85), .large]`
+                // the sheet dropped back to the small detent when a page with
+                // little content (Advanced, Search engine) was pushed, so that
+                // screen no longer filled the height. `.large` keeps every
+                // page full height, like the app's other sheets.
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
-                .geometryGroup()
+            case .browser(let session):
+                miniBrowser(session, spaces: model.snapshot.spaces)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
+                    .geometryGroup()
             case .activity:
                 SyncedActivitySheet(
                     allSpaces: model.snapshot.spaces,
@@ -246,12 +292,10 @@ struct SpacesBrowserView: View {
                         if model.alwaysOpenExternally {
                             ExternalBrowser.open(url)
                         } else {
-                            // Swap to the mini-browser without dismissing this sheet first.
-                            activeSheet = .browser(BrowserTabSession(
-                                url: url,
-                                initialTitle: nil,
-                                space: space
-                            ))
+                            // Compact: replace this sheet's content, so the
+                            // spaces list does not flash through. Regular: the
+                            // browser is a cover, so this sheet dismisses.
+                            presentBrowser(url: url, title: nil, space: space)
                         }
                     }
                 )
@@ -264,6 +308,10 @@ struct SpacesBrowserView: View {
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
             }
+        }
+        .fullScreenCover(item: fullScreenBrowser) { session in
+            miniBrowser(session, spaces: model.snapshot.spaces)
+                .geometryGroup()
         }
         .task { await model.initialLoad() }
         .onReceive(NotificationCenter.default.publisher(for: .zenCompanionSnapshotStale)) { _ in
@@ -282,10 +330,17 @@ struct SpacesBrowserView: View {
             }
         }
         .onChange(of: scenePhase) { _, phase in
+            if phase == .background { model.sceneEnteredBackground() }
             // Returning to the foreground (e.g. after sharing via the share
             // extension) refreshes what's on screen against the server.
             guard phase == .active else { return }
             Task { await model.sceneBecameActive() }
+        }
+        .onChange(of: model.searchOnOpenPending) { _, pending in
+            guard pending else { return }
+            // Leave an open browser or settings sheet where the user left it.
+            if activeSheet == nil { openNewTab(in: model.activeSpace) }
+            model.consumeSearchOnOpen()
         }
         .onChange(of: model.reviewPromptPending) { _, pending in
             guard pending else { return }
@@ -300,7 +355,7 @@ struct SpacesBrowserView: View {
     // above the essentials grid or below the space switcher, per
     // `model.toolbarPlacement`.
 
-    private func actionBar(scheme: ColorScheme) -> some View {
+    private func actionBar(scheme: ColorScheme, placement: ToolbarPlacement) -> some View {
         HStack(spacing: 12) {
             actionCard(systemName: "archivebox", accessibilityKey: "activity.title", scheme: scheme) {
                 activeSheet = .activity
@@ -315,8 +370,9 @@ struct SpacesBrowserView: View {
         .padding(.horizontal, 20)
         // Breathing room so the bar and the tile group beside it don't read as
         // one block: below the bar at the top placement (toward the essentials
-        // grid), toward the disclaimer at the bottom placement.
-        .padding(.bottom, 6)
+        // grid), toward the screen edge at the bottom placement, where it is
+        // the last row.
+        .padding(.bottom, placement == .bottom ? 4 : 6)
         // iPadOS 26 windowed mode puts the system window controls on the
         // window's top-leading corner; the bar makes room on the leading edge
         // so the Activity button stays reachable. No-op when the insets are
@@ -337,9 +393,10 @@ struct SpacesBrowserView: View {
                 .frame(width: 44, height: 44)
                 .background(
                     Palette.lift(scheme),
-                    in: RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    in: RoundedRectangle(cornerRadius: Palette.liftCornerRadius, style: .continuous)
                 )
-                .contentShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+                .glassRim(cornerRadius: Palette.liftCornerRadius)
+                .contentShape(RoundedRectangle(cornerRadius: Palette.liftCornerRadius, style: .continuous))
         }
         .buttonStyle(SquircleButtonStyle())
         .accessibilityLabel(Text(LocalizedStringKey(accessibilityKey)))
@@ -366,9 +423,10 @@ struct SpacesBrowserView: View {
             .frame(height: 44)
             .background(
                 Palette.lift(scheme),
-                in: RoundedRectangle(cornerRadius: 13, style: .continuous)
+                in: RoundedRectangle(cornerRadius: Palette.liftCornerRadius, style: .continuous)
             )
-            .contentShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+            .glassRim(cornerRadius: Palette.liftCornerRadius)
+            .contentShape(RoundedRectangle(cornerRadius: Palette.liftCornerRadius, style: .continuous))
         }
         .buttonStyle(SquircleButtonStyle())
         .accessibilityLabel(Text("browser.web_placeholder"))
@@ -380,22 +438,66 @@ struct SpacesBrowserView: View {
             ExternalBrowser.open(url)
             return
         }
-        activeSheet = .browser(BrowserTabSession(
-            url: url,
-            initialTitle: tab.displayTitle,
-            space: space
-        ))
+        presentBrowser(url: url, title: tab.displayTitle, space: space)
     }
 
     private func openNewTab(in space: ZenSpace) {
-        activeSheet = .browser(BrowserTabSession(
-            url: nil,
-            initialTitle: nil,
-            space: space
-        ))
+        presentBrowser(url: nil, title: nil, space: space)
+    }
+
+    /// Decides the presentation once. `horizontalSizeClass` is read here, not
+    /// while the browser is already up.
+    private func presentBrowser(url: URL?, title: String?, space: ZenSpace) {
+        let presentation = QuickBrowserPresentationPolicy.presentation(for: horizontalSizeClass)
+        browserFillsScreen = presentation == .fullScreen
+        activeSheet = .browser(BrowserTabSession(url: url, initialTitle: title, space: space))
+    }
+
+    private func miniBrowser(_ session: BrowserTabSession, spaces: [ZenSpace]) -> some View {
+        MiniBrowserView(
+            initialURL: session.url,
+            initialTitle: session.initialTitle,
+            space: session.space,
+            allSpaces: spaces,
+            showsToolbarClose: browserFillsScreen,
+            onDismiss: { dismissPresentedBrowser() }
+        )
+    }
+
+    private func dismissPresentedBrowser() {
+        activeSheet = nil
+        browserFillsScreen = false
     }
 
     // MARK: States (shown until the first successful sync)
+
+    /// A line at the bottom of the dock, shown only when a delete or a
+    /// refresh over cached spaces failed, so sync problems are visible
+    /// without a banner.
+    @ViewBuilder
+    private func statusLine(scheme: ColorScheme) -> some View {
+        if let deleteError = model.deleteError {
+            Text(deleteError)
+                .font(.system(size: 12, weight: .medium, design: .rounded))
+                .foregroundStyle(Palette.ink(scheme).opacity(0.7))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 20)
+                .padding(.bottom, 6)
+                .accessibilityAddTraits(.updatesFrequently)
+        } else if model.loadError != nil, !model.reloading {
+            Button {
+                Task { await model.reload() }
+            } label: {
+                Text("home.refresh_failed")
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(Palette.ink(scheme).opacity(0.55))
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 6)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+    }
 
     @ViewBuilder
     private func stateArea(scheme: ColorScheme) -> some View {
@@ -424,9 +526,10 @@ struct SpacesBrowserView: View {
                         .padding(.horizontal, 20)
                         .padding(.vertical, 12)
                         .background(Palette.lift(scheme), in: Capsule())
+                        .glassRimCapsule()
                         .foregroundStyle(Palette.ink(scheme))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressedButtonStyle())
             }
         }
     }
@@ -444,6 +547,8 @@ struct FolderBlock: View {
     var onOpenTab: (ZenTab) -> Void = { _ in }
     var onDeleteTab: (String) async -> Void = { _ in }
     var onRenameTab: (String, String) async -> Void = { _, _ in }
+    var onMoveTab: (String, String?) async -> Void = { _, _ in }
+    var moveSpace: ZenSpace? = nil
     /// True when rendered inside another folder's expanded content. The
     /// parent already applies the level indent via `.padding(.leading, 20)`,
     /// so a nested block must not add its own horizontal padding — otherwise
@@ -473,7 +578,7 @@ struct FolderBlock: View {
                 .padding(.vertical, 9)
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(PressedButtonStyle())
 
             if isExpanded {
                 ForEach(folder.tabs) { tab in
@@ -481,9 +586,12 @@ struct FolderBlock: View {
                         tab: tab,
                         scheme: scheme,
                         deletable: true,
+                        currentFolderId: folder.id,
+                        moveSpace: moveSpace,
                         onOpen: { onOpenTab(tab) },
                         onDelete: { await onDeleteTab(tab.id) },
-                        onRename: { label in await onRenameTab(tab.id, label) }
+                        onRename: { label in await onRenameTab(tab.id, label) },
+                        onMove: { folderId in await onMoveTab(tab.id, folderId) }
                     )
                     .padding(.leading, 20)
                     .transition(.opacity.combined(with: .move(edge: .top)))
@@ -495,6 +603,8 @@ struct FolderBlock: View {
                         onOpenTab: onOpenTab,
                         onDeleteTab: onDeleteTab,
                         onRenameTab: onRenameTab,
+                        onMoveTab: onMoveTab,
+                        moveSpace: moveSpace,
                         isNested: true
                     )
                     .padding(.leading, 20)
@@ -519,9 +629,8 @@ struct FolderBlock: View {
     }
 
     /// The folder's user icon, nil for "no icon" and the plain folder emojis
-    /// older records may carry.
+    /// older records may carry (raw or inside Zen's emoji SVG).
     private var userIcon: String? {
-        guard let icon = folder.icon, !icon.isEmpty, icon != "📁", icon != "📂" else { return nil }
-        return icon
+        ZenIconDecoder.folderFlapIcon(folder.icon)
     }
 }

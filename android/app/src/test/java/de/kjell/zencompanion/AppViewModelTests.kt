@@ -4,6 +4,7 @@ import android.content.ContextWrapper
 import android.content.SharedPreferences
 import de.kjell.zencompanion.data.AccountStore
 import de.kjell.zencompanion.data.DemoCatalog
+import de.kjell.zencompanion.data.EssentialsColumns
 import de.kjell.zencompanion.data.SaveKind
 import de.kjell.zencompanion.data.SearchEngine
 import de.kjell.zencompanion.data.SnapshotCache
@@ -174,6 +175,52 @@ class AppViewModelTests {
     }
 
     @Test
+    fun reloadDuringReloadRunsAgainAfterward() = runTest(mainDispatcherRule.testDispatcher) {
+        val browser = FakeBrowserRepository()
+        browser.refreshGate = CompletableDeferred()
+        val vm = newViewModel(browser = browser)
+
+        vm.reload()
+        runCurrent()
+        // A write's stale signal lands mid-fetch: it must not be dropped.
+        vm.reload()
+        runCurrent()
+        assertEquals(1, browser.refreshCalls)
+
+        browser.refreshGate?.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(2, browser.refreshCalls)
+    }
+
+    @Test
+    fun interruptedRefreshIsRetriedOnce() = runTest(mainDispatcherRule.testDispatcher) {
+        val browser = FakeBrowserRepository()
+        browser.refreshFailures += java.util.concurrent.CancellationException("request interrupted")
+        val vm = newViewModel(browser = browser)
+
+        vm.reload()
+        advanceUntilIdle()
+
+        assertEquals(2, browser.refreshCalls)
+        assertNull(vm.browser.value.loadErrorRes)
+    }
+
+    @Test
+    fun failedDeleteShowsMessageBriefly() = runTest(mainDispatcherRule.testDispatcher) {
+        val browser = FakeBrowserRepository()
+        browser.deleteFailure = SyncError.Conflict()
+        val vm = newViewModel(browser = browser)
+
+        vm.deleteTab("t1")
+        runCurrent()
+        assertEquals(R.string.error_conflict, vm.browser.value.deleteErrorRes)
+
+        advanceTimeBy(5_001)
+        runCurrent()
+        assertNull(vm.browser.value.deleteErrorRes)
+    }
+
+    @Test
     fun saveKindPersistsThroughPreferencesRepository() {
         val repository = AndroidPreferencesRepository(context)
 
@@ -190,7 +237,7 @@ class AppViewModelTests {
     fun toolbarPlacementPersistsThroughPreferencesRepository() {
         val repository = AndroidPreferencesRepository(context)
 
-        assertEquals(ToolbarPlacement.TOP, repository.load().toolbarPlacement)
+        assertEquals(ToolbarPlacement.BOTTOM, repository.load().toolbarPlacement)
 
         repository.setToolbarPlacement(ToolbarPlacement.BOTTOM)
         assertEquals(ToolbarPlacement.BOTTOM, repository.load().toolbarPlacement)
@@ -201,9 +248,66 @@ class AppViewModelTests {
 
     @Test
     fun toolbarPlacementFromStorageIgnoresUnknownValue() {
-        assertEquals(ToolbarPlacement.TOP, ToolbarPlacement.fromStorage(null))
-        assertEquals(ToolbarPlacement.TOP, ToolbarPlacement.fromStorage("sideways"))
+        assertEquals(ToolbarPlacement.BOTTOM, ToolbarPlacement.fromStorage(null))
+        assertEquals(ToolbarPlacement.BOTTOM, ToolbarPlacement.fromStorage("sideways"))
         assertEquals(ToolbarPlacement.BOTTOM, ToolbarPlacement.fromStorage("bottom"))
+    }
+
+    private fun oneSpaceBrowser() = FakeBrowserRepository(
+        snapshot = ZenSpaces.ZenSnapshot(
+            listOf(ZenSpaces.ZenSpace("s1", "One", null, null, null, emptyList())),
+        ),
+    )
+
+    private fun searchPreferences(enabled: Boolean = true) =
+        FakePreferencesRepository().apply { state = state.copy(openIntoSearch = enabled) }
+
+    @Test
+    fun openIntoSearchAsksOncePerTripToTheForeground() = runTest(mainDispatcherRule.testDispatcher) {
+        val vm = newViewModel(browser = oneSpaceBrowser(), preferences = searchPreferences())
+        vm.completeSignIn(snapshot())
+        advanceUntilIdle()
+
+        vm.appCameToForeground()
+        assertEquals(true, vm.searchOnOpenPending.value)
+        vm.consumeSearchOnOpen()
+
+        // A config change or a second start without leaving: no new tab.
+        vm.appCameToForeground()
+        assertEquals(false, vm.searchOnOpenPending.value)
+
+        vm.appWentToBackground()
+        vm.appCameToForeground()
+        assertEquals(true, vm.searchOnOpenPending.value)
+    }
+
+    @Test
+    fun openIntoSearchStaysOnSpacesWhenOff() = runTest(mainDispatcherRule.testDispatcher) {
+        val vm = newViewModel(browser = oneSpaceBrowser(), preferences = searchPreferences(enabled = false))
+        vm.completeSignIn(snapshot())
+        advanceUntilIdle()
+
+        vm.appCameToForeground()
+        vm.appWentToBackground()
+        vm.appCameToForeground()
+
+        assertEquals(false, vm.searchOnOpenPending.value)
+    }
+
+    @Test
+    fun openIntoSearchSkipsAnOpenWithoutSpaces() = runTest(mainDispatcherRule.testDispatcher) {
+        val vm = newViewModel(browser = oneSpaceBrowser(), preferences = searchPreferences())
+
+        // First launch after sign-in: the screen starts before any spaces load.
+        vm.appCameToForeground()
+        vm.completeSignIn(snapshot())
+        advanceUntilIdle()
+        vm.appCameToForeground()
+        assertEquals(false, vm.searchOnOpenPending.value)
+
+        vm.appWentToBackground()
+        vm.appCameToForeground()
+        assertEquals(true, vm.searchOnOpenPending.value)
     }
 
     @Test
@@ -249,6 +353,80 @@ class AppViewModelTests {
 
         runCurrent()
         assertEquals("tab-1" to "  Work  ", browser.renamed.single())
+    }
+
+    @Test
+    fun pinTabMovesRowToPinnedSectionAndForwardsWrite() = runTest(mainDispatcherRule.testDispatcher) {
+        val normal = ZenSpaces.ZenTab(id = "n1", url = "https://n.example", title = "Normal", staticLabel = "Keep")
+        val pinnedSnapshot = ZenSpaces.ZenSnapshot(
+            spaces = listOf(
+                ZenSpaces.ZenSpace(
+                    id = "s1",
+                    name = "One",
+                    icon = null,
+                    containerGuid = null,
+                    theme = null,
+                    pinned = emptyList(),
+                    tabs = listOf(ZenSpaces.ZenItem.Tab(normal)),
+                ),
+            ),
+        )
+        val browser = FakeBrowserRepository(snapshot = pinnedSnapshot)
+        val vm = newViewModel(browser = browser)
+        vm.completeSignIn(snapshot())
+        advanceUntilIdle()
+
+        vm.pinTab("n1", "s1")
+
+        // The row leaves the normal section synchronously, before the write.
+        val space = vm.browser.value.snapshot.spaces.first()
+        assertTrue(space.tabs.isEmpty())
+        assertEquals(listOf("n1"), space.pinned.map { it.id })
+        assertEquals("Keep", (space.pinned.single() as ZenSpaces.ZenItem.Tab).tab.staticLabel)
+
+        runCurrent()
+        assertEquals("n1" to "s1", browser.pinnedTabs.single())
+    }
+
+    @Test
+    fun pinTabReloadsAndSnapsBackWhenWriteFails() = runTest(mainDispatcherRule.testDispatcher) {
+        val original = ZenSpaces.ZenSnapshot(
+            spaces = listOf(
+                ZenSpaces.ZenSpace(
+                    id = "s1",
+                    name = "One",
+                    icon = null,
+                    containerGuid = null,
+                    theme = null,
+                    pinned = emptyList(),
+                    tabs = listOf(
+                        ZenSpaces.ZenItem.Tab(
+                            ZenSpaces.ZenTab(id = "n1", url = "https://n.example", title = "Normal"),
+                        ),
+                    ),
+                ),
+            ),
+        )
+        val browser = FakeBrowserRepository(snapshot = original).apply {
+            pinError = RuntimeException("boom")
+        }
+        val vm = newViewModel(browser = browser)
+        vm.completeSignIn(snapshot())
+        advanceUntilIdle()
+        val refreshesBefore = browser.refreshCalls
+
+        vm.pinTab("n1", "s1")
+
+        // The optimistic move happens synchronously...
+        assertTrue(vm.browser.value.snapshot.spaces.first().tabs.isEmpty())
+        advanceUntilIdle()
+
+        // ...and the failed write reloads, so the row snaps back to normal.
+        val space = vm.browser.value.snapshot.spaces.first()
+        assertEquals(listOf("n1"), space.tabs.map { it.id })
+        assertTrue(space.pinned.isEmpty())
+        assertEquals("n1" to "s1", browser.pinnedTabs.single())
+        assertTrue(browser.refreshCalls > refreshesBefore)
     }
 
     private fun snapshotWithPinnedTab(): ZenSpaces.ZenSnapshot {
@@ -422,9 +600,14 @@ private class FakeBrowserRepository(
     val added = mutableListOf<AddedTab>()
     val deleted = mutableListOf<String>()
     val renamed = mutableListOf<Pair<String, String>>()
+    val pinnedTabs = mutableListOf<Pair<String, String>>()
+    var pinError: Throwable? = null
     var lastSpace: String? = null
     var refreshGate: CompletableDeferred<Unit>? = null
     var refreshCalls = 0
+    /** Thrown by the next refresh calls, in order, before succeeding. */
+    val refreshFailures = mutableListOf<Exception>()
+    var deleteFailure: Exception? = null
     var demo = false
 
     override val cachedSnapshot: ZenSpaces.ZenSnapshot?
@@ -439,6 +622,7 @@ private class FakeBrowserRepository(
     override suspend fun refresh(): ZenSpaces.ZenSnapshot {
         refreshCalls++
         refreshGate?.await()
+        if (refreshFailures.isNotEmpty()) throw refreshFailures.removeAt(0)
         return snapshot ?: ZenSpaces.ZenSnapshot(emptyList())
     }
 
@@ -455,10 +639,18 @@ private class FakeBrowserRepository(
 
     override suspend fun deleteTab(id: String) {
         deleted += id
+        deleteFailure?.let { throw it }
     }
 
     override suspend fun renameTab(id: String, label: String) {
         renamed += id to label
+    }
+
+    override suspend fun moveTab(id: String, spaceId: String, folderId: String?) = Unit
+
+    override suspend fun pinTab(id: String, spaceId: String) {
+        pinnedTabs += id to spaceId
+        pinError?.let { throw it }
     }
 
     override fun isDemo(): Boolean = demo
@@ -491,12 +683,20 @@ private class FakePreferencesRepository : PreferencesRepository {
         state = state.copy(essentialsGrouping = grouping)
     }
 
+    override fun setEssentialsColumns(columns: EssentialsColumns) {
+        state = state.copy(essentialsColumns = columns)
+    }
+
     override fun setSaveKind(kind: SaveKind) {
         state = state.copy(saveKind = kind)
     }
 
     override fun setToolbarPlacement(placement: ToolbarPlacement) {
         state = state.copy(toolbarPlacement = placement)
+    }
+
+    override fun setOpenIntoSearch(enabled: Boolean) {
+        state = state.copy(openIntoSearch = enabled)
     }
 
     override fun syncSetupHintDismissed(): Boolean = syncSetupDismissedFlag
