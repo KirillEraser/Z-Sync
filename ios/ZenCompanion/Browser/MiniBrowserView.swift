@@ -53,8 +53,11 @@ struct MiniBrowserView: View {
         scheme == .dark ? Color(uiColor: .systemBackground) : Color.white
     }
 
+    /// The page's own color, or the error panel's while it covers the page:
+    /// the failed load leaves the previous page's color behind.
     private var sheetBackground: Color {
-        model.themeColor ?? defaultBackground
+        if model.pageError != nil { return Palette.paper(scheme) }
+        return model.themeColor ?? defaultBackground
     }
 
     var body: some View {
@@ -196,6 +199,11 @@ struct MiniBrowserView: View {
                         // web view sits between the header and a full-width
                         // bottom bar, separated by hairline strokes.
                         webPane
+                            .overlay {
+                                if let error = model.pageError {
+                                    errorPanel(error)
+                                }
+                            }
                     }
                 }
 
@@ -265,6 +273,9 @@ struct MiniBrowserView: View {
             }
             .onChange(of: model.currentURL) { _, newURL in
                 model.currentURLDidChange(newURL, isAddressFocused: isAddressFocused)
+            }
+            .onChange(of: model.failedURL) { _, _ in
+                model.pageErrorDidChange(isAddressFocused: isAddressFocused)
             }
             .onChange(of: isAddressFocused) { _, focused in
                 if !focused { startsInSearch = false }
@@ -344,6 +355,22 @@ struct MiniBrowserView: View {
         }
     }
 
+    private func errorPanel(_ error: BrowserPageError) -> some View {
+        BrowserErrorPanel(
+            error: error,
+            host: model.failedURL.map(BrowserInput.displayText(for:)) ?? "",
+            isLoading: model.isLoading,
+            onRetry: { model.retryFailedLoad() },
+            onSearch: { model.searchFailedHost() },
+            onOpenExternally: { model.openCurrentInExternalBrowser() },
+            onLeave: {
+                if model.leaveErrorPage() {
+                    onDismiss()
+                }
+            }
+        )
+    }
+
     private var toolbarBackButton: some View {
         Button {
             model.goBack()
@@ -382,7 +409,8 @@ struct MiniBrowserView: View {
             Image(systemName: "pin")
                 .symbolRenderingMode(.monochrome)
         }
-        .disabled(model.effectiveURL == nil)
+        // A page that failed to load has nothing worth pinning.
+        .disabled(model.effectiveURL == nil || model.pageError != nil)
         .accessibilityLabel(Text("browser.pin_to_space"))
     }
 
