@@ -62,7 +62,9 @@ class ShareActivity : ComponentActivity() {
                 errorText = state.errorText,
                 saveKind = state.saveKind,
                 savedAsPinnedFallback = state.savedAsPinnedFallback,
+                allowsNormalTabs = state.allowsNormalTabs,
                 onSelectDestination = viewModel::selectDestination,
+                onSelectSaveKind = viewModel::selectSaveKind,
                 onSave = viewModel::save,
                 onCancel = viewModel::cancel,
             )

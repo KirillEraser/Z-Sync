@@ -1,23 +1,32 @@
 package de.kjell.zencompanion.share
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -27,13 +36,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import de.kjell.zencompanion.R
 import de.kjell.zencompanion.data.SaveKind
@@ -48,6 +61,7 @@ import de.kjell.zencompanion.ui.motion.DampingShareResult
 import de.kjell.zencompanion.ui.motion.StiffnessShareResult
 import de.kjell.zencompanion.ui.theme.LocalZenColors
 import de.kjell.zencompanion.ui.theme.ZenType
+import de.kjell.zencompanion.ui.theme.liftRim
 import de.kjell.zencompanion.util.Haptics
 import de.kjell.zencompanion.util.PageTitle
 
@@ -80,7 +94,9 @@ fun ShareScreen(
     errorText: String?,
     saveKind: SaveKind = SaveKind.PINNED,
     savedAsPinnedFallback: Boolean = false,
+    allowsNormalTabs: Boolean = false,
     onSelectDestination: (PinDestination) -> Unit,
+    onSelectSaveKind: (SaveKind) -> Unit = {},
     onSave: () -> Unit,
     onCancel: () -> Unit,
 ) {
@@ -153,7 +169,9 @@ fun ShareScreen(
                     saving = phase == SharePhase.saving,
                     hideFolders = saveKind == SaveKind.NORMAL,
                     saveKind = saveKind,
+                    allowsNormalTabs = allowsNormalTabs,
                     onSelectDestination = onSelectDestination,
+                    onSelectSaveKind = onSelectSaveKind,
                     onSave = onSave,
                     onCancel = onCancel,
                 )
@@ -236,7 +254,9 @@ private fun Picker(
     saving: Boolean,
     hideFolders: Boolean,
     saveKind: SaveKind,
+    allowsNormalTabs: Boolean,
     onSelectDestination: (PinDestination) -> Unit,
+    onSelectSaveKind: (SaveKind) -> Unit,
     onSave: () -> Unit,
     onCancel: () -> Unit,
 ) {
@@ -301,6 +321,14 @@ private fun Picker(
             )
         }
 
+        if (allowsNormalTabs) {
+            SaveKindPicker(
+                selected = saveKind,
+                onSelect = onSelectSaveKind,
+                modifier = Modifier.padding(top = 16.dp, start = 24.dp, end = 24.dp),
+            )
+        }
+
         Spacer(Modifier.weight(1f))
 
         Column(
@@ -344,6 +372,122 @@ private fun Picker(
                 )
             }
         }
+    }
+}
+
+/**
+ * Compact per-share override, styled like the space picker but smaller.
+ * Only shown when the synced browser can write normal tabs; leaving it
+ * untouched keeps the persisted setting.
+ */
+@Composable
+private fun SaveKindPicker(
+    selected: SaveKind,
+    onSelect: (SaveKind) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = LocalZenColors.current
+    val saveAs = stringResource(R.string.share_save_as)
+    val kindLabel = stringResource(
+        if (selected == SaveKind.PINNED) {
+            R.string.share_save_kind_pinned
+        } else {
+            R.string.share_save_kind_normal
+        },
+    )
+    var menuOpen by remember { mutableStateOf(false) }
+    Box(modifier) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .background(colors.lift, Capsule)
+                .liftRim(Capsule)
+                .clickable { menuOpen = true }
+                .semantics { contentDescription = "$saveAs: $kindLabel" }
+                .padding(horizontal = 14.dp, vertical = 8.dp),
+        ) {
+            SaveKindIcon(
+                kind = selected,
+                size = 14.dp,
+                tint = colors.ink,
+            )
+            Spacer(Modifier.width(7.dp))
+            Text(
+                text = kindLabel,
+                style = ZenType.rounded(14, FontWeight.SemiBold),
+                color = colors.ink,
+            )
+            Spacer(Modifier.width(7.dp))
+            Image(
+                painter = painterResource(R.drawable.ic_chevron_up_down),
+                contentDescription = null,
+                colorFilter = ColorFilter.tint(colors.ink50),
+                modifier = Modifier.size(11.dp),
+            )
+        }
+
+        DropdownMenu(
+            expanded = menuOpen,
+            onDismissRequest = { menuOpen = false },
+        ) {
+            for (kind in SaveKind.entries) {
+                val isSelected = selected == kind
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = stringResource(
+                                if (kind == SaveKind.PINNED) {
+                                    R.string.share_save_kind_pinned_menu
+                                } else {
+                                    R.string.share_save_kind_normal_menu
+                                },
+                            ),
+                            style = ZenType.rounded(15, FontWeight.Medium),
+                        )
+                    },
+                    leadingIcon = {
+                        SaveKindIcon(
+                            kind = kind,
+                            size = 18.dp,
+                            tint = colors.ink,
+                        )
+                    },
+                    trailingIcon = {
+                        if (isSelected) {
+                            Image(
+                                painter = painterResource(R.drawable.ic_checkmark),
+                                contentDescription = null,
+                                colorFilter = ColorFilter.tint(colors.ink),
+                                modifier = Modifier.size(14.dp),
+                            )
+                        }
+                    },
+                    onClick = {
+                        menuOpen = false
+                        onSelect(kind)
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SaveKindIcon(kind: SaveKind, size: Dp, tint: Color) {
+    if (kind == SaveKind.PINNED) {
+        Icon(
+            imageVector = Icons.Outlined.PushPin,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(size),
+        )
+    } else {
+        Icon(
+            painter = painterResource(R.drawable.ic_tab_stack),
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(size),
+        )
     }
 }
 

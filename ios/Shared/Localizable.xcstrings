@@ -960,6 +960,66 @@
         }
       }
     },
+    "share.save_as" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save as"
+          }
+        }
+      }
+    },
+    "share.save_normal" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save Tab"
+          }
+        }
+      }
+    },
+    "share.save_kind.normal" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Normal"
+          }
+        }
+      }
+    },
+    "share.save_kind.normal_menu" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Normal Tab"
+          }
+        }
+      }
+    },
+    "share.save_kind.pinned" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pin"
+          }
+        }
+      }
+    },
+    "share.save_kind.pinned_menu" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pin Tab"
+          }
+        }
+      }
+    },
     "share.saved.detail %@" : {
       "extractionState" : "stale",
       "localizations" : {

@@ -154,6 +154,12 @@ struct ShareSheetView: View {
             .padding(.horizontal, 24)
             .accessibilityLabel(Text("share.workspace"))
 
+            if model.allowsNormalTabs {
+                saveKindMenu
+                    .padding(.top, 16)
+                    .padding(.horizontal, 24)
+            }
+
             Spacer()
 
             VStack(spacing: 14) {
@@ -164,7 +170,7 @@ struct ShareSheetView: View {
                         if model.phase == .saving {
                             ProgressView().tint(Palette.paper(effectiveScheme))
                         } else {
-                            Text("share.save")
+                            Text(LocalizedStringKey(model.saveKind == .normal ? "share.save_normal" : "share.save"))
                                 .font(.system(size: 17, weight: .semibold, design: .rounded))
                         }
                     }
@@ -190,6 +196,49 @@ struct ShareSheetView: View {
             .padding(.horizontal, 24)
             .padding(.bottom, 28)
         }
+    }
+
+    /// Compact per-share override, styled like the space picker but smaller.
+    /// Only shown when the synced browser can write normal tabs; leaving it
+    /// untouched keeps the persisted setting.
+    private var saveKindMenu: some View {
+        Menu {
+            ForEach(SaveKind.allCases) { kind in
+                let title = kind == .pinned
+                    ? String(localized: "share.save_kind.pinned_menu")
+                    : String(localized: "share.save_kind.normal_menu")
+                Button {
+                    model.selectSaveKind(kind)
+                } label: {
+                    if model.saveKind == kind {
+                        Label(title, systemImage: "checkmark")
+                    } else {
+                        Text(title)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 7) {
+                Image(systemName: model.saveKind == .pinned ? "pin.fill" : "rectangle.stack")
+                    .font(.system(size: 11.5, weight: .semibold))
+                Text(LocalizedStringKey(model.saveKind == .pinned ? "share.save_kind.pinned" : "share.save_kind.normal"))
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 8, weight: .bold))
+                    .opacity(0.45)
+            }
+            .foregroundStyle(Palette.ink(effectiveScheme))
+            .padding(.horizontal, 15)
+            .padding(.vertical, 8)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(Palette.lift(effectiveScheme))
+            )
+            .glassRimCapsule()
+            .contentShape(Capsule())
+        }
+        .accessibilityLabel(Text("share.save_as"))
+        .accessibilityValue(Text(LocalizedStringKey(model.saveKind == .pinned ? "share.save_kind.pinned" : "share.save_kind.normal")))
     }
 
     private func status(title: String, detail: String, systemImage: String? = nil, action: String?, run: @escaping () -> Void) -> some View {

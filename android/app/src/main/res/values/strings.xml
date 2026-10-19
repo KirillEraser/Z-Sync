@@ -95,6 +95,11 @@
 
     <string name="share_save">Pin Tab</string>
     <string name="share_save_normal">Save Tab</string>
+    <string name="share_save_as">Save as</string>
+    <string name="share_save_kind_pinned">Pin</string>
+    <string name="share_save_kind_normal">Normal</string>
+    <string name="share_save_kind_pinned_menu">Pin Tab</string>
+    <string name="share_save_kind_normal_menu">Normal Tab</string>
     <string name="share_saved_title">Saved</string>
     <string name="share_saved_detail">Tab saved in %1$s</string>
     <string name="browser_pin_failed">Couldn\'t save this tab.</string>

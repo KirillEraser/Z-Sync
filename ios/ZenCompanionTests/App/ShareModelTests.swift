@@ -12,8 +12,15 @@ final class ShareModelTests: XCTestCase {
         )
     }
 
-    private func snapshot(_ spaces: [ZenCompanion.ZenSpace]) -> ZenCompanion.ZenSnapshot {
-        ZenCompanion.ZenSnapshot(spaces: spaces, fetchedAt: Date(timeIntervalSince1970: 0))
+    private func snapshot(
+        _ spaces: [ZenCompanion.ZenSpace],
+        capability: ZenCompanion.NormalTabsCapability = .absent
+    ) -> ZenCompanion.ZenSnapshot {
+        ZenCompanion.ZenSnapshot(
+            spaces: spaces,
+            normalTabsCapability: capability,
+            fetchedAt: Date(timeIntervalSince1970: 0)
+        )
     }
 
     private func makeModel(
@@ -159,8 +166,8 @@ final class ShareModelTests: XCTestCase {
         let space = space("s1", folders: [ZenCompanion.ZenFolder(id: "folder-1", name: "Folder")])
         let session = FakeShareSession(
             signedIn: true,
-            cached: snapshot([space]),
-            fresh: snapshot([space]),
+            cached: snapshot([space], capability: .enabled),
+            fresh: snapshot([space], capability: .enabled),
             saveKind: .normal,
             fallBackToPinned: true
         )
@@ -183,6 +190,108 @@ final class ShareModelTests: XCTestCase {
         XCTAssertEqual(session.added[0].kind, .normal)
         XCTAssertNil(session.added[0].folderId)
         XCTAssertTrue(model.didFinish)
+    }
+
+    func testPerShareNormalChoiceSavesNormalAndLeavesTheSavedDefaultAlone() async {
+        let space = space("s1", folders: [ZenCompanion.ZenFolder(id: "folder-1", name: "Folder")])
+        let session = FakeShareSession(
+            signedIn: true,
+            cached: snapshot([space], capability: .enabled),
+            fresh: snapshot([space], capability: .enabled),
+            saveKind: .pinned
+        )
+        let model = makeModel(session: session)
+        await model.bootstrap()
+
+        XCTAssertTrue(model.allowsNormalTabs)
+        model.selectDestination(ZenCompanion.PinDestination(spaceId: "s1", folderId: "folder-1"))
+        model.selectSaveKind(.normal)
+
+        XCTAssertEqual(model.saveKind, .normal)
+        XCTAssertEqual(model.destination, ZenCompanion.PinDestination(spaceId: "s1"))
+
+        await model.save()
+
+        XCTAssertEqual(session.added.count, 1)
+        XCTAssertEqual(session.added[0].kind, .normal)
+        XCTAssertNil(session.added[0].folderId)
+
+        // The next share starts from the persisted setting again.
+        let next = makeModel(session: session)
+        await next.bootstrap()
+        XCTAssertEqual(next.saveKind, .pinned)
+    }
+
+    func testPinnedOverrideForOneShareDoesNotChangeTheSavedDefault() async {
+        let space = space("s1")
+        let session = FakeShareSession(
+            signedIn: true,
+            cached: snapshot([space], capability: .enabled),
+            fresh: snapshot([space], capability: .enabled),
+            saveKind: .normal
+        )
+        let model = makeModel(session: session)
+        await model.bootstrap()
+        XCTAssertEqual(model.saveKind, .normal)
+
+        model.selectSaveKind(.pinned)
+        XCTAssertEqual(model.saveKind, .pinned)
+
+        await model.save()
+
+        XCTAssertEqual(session.added.first?.kind, .pinned)
+        let next = makeModel(session: session)
+        await next.bootstrap()
+        XCTAssertEqual(next.saveKind, .normal)
+    }
+
+    /// Without a proven normal-tabs capability the sheet must not offer or
+    /// write normal records, even if the stored default says normal.
+    func testCapabilityDisabledForcesPinnedAndHidesTheChoice() async {
+        let space = space("s1")
+        let session = FakeShareSession(
+            signedIn: true,
+            cached: snapshot([space], capability: .disabled),
+            fresh: snapshot([space], capability: .disabled),
+            saveKind: .normal
+        )
+        let model = makeModel(session: session)
+        await model.bootstrap()
+
+        XCTAssertFalse(model.allowsNormalTabs)
+        XCTAssertEqual(model.saveKind, .pinned)
+
+        model.selectSaveKind(.normal)
+        XCTAssertEqual(model.saveKind, .pinned)
+
+        await model.save()
+        XCTAssertEqual(session.added.first?.kind, .pinned)
+    }
+
+    /// A capability that arrives with the fresh snapshot applies the saved
+    /// default, but never replaces a choice the user already made.
+    func testFreshCapabilityAppliesTheSavedDefaultUnlessTheUserChose() async {
+        let space = space("s1")
+        let session = FakeShareSession(
+            signedIn: true,
+            cached: snapshot([space], capability: .absent),
+            fresh: snapshot([space], capability: .enabled),
+            saveKind: .normal
+        )
+        let model = makeModel(session: session)
+        XCTAssertFalse(model.allowsNormalTabs)
+        XCTAssertEqual(model.saveKind, .pinned)
+
+        await model.bootstrap()
+
+        XCTAssertTrue(model.allowsNormalTabs)
+        XCTAssertEqual(model.saveKind, .normal)
+
+        model.selectSaveKind(.pinned)
+        session.fresh = snapshot([space], capability: .enabled)
+        await model.refreshSpaces()
+
+        XCTAssertEqual(model.saveKind, .pinned)
     }
 
     func testSaveWithNoSpacesFailsWithoutWrite() async {
