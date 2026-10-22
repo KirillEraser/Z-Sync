@@ -115,12 +115,20 @@ class ShareViewModel(
             get() = normalTabsCapability == ZenSpaces.NormalTabsCapability.ENABLED
     }
 
+    /** One cached read for both initial fields, so they cannot disagree. */
+    private val initialCapability: ZenSpaces.NormalTabsCapability =
+        repository.cachedSnapshot?.normalTabsCapability ?: ZenSpaces.NormalTabsCapability.ABSENT
+
     private val _state = MutableStateFlow(
         State(
             url = initialUrl,
             pageTitle = initialPageTitle,
-            normalTabsCapability = initialCapability(),
-            saveKind = initialSaveKind(),
+            normalTabsCapability = initialCapability,
+            saveKind = if (initialCapability == ZenSpaces.NormalTabsCapability.ENABLED) {
+                repository.saveKind()
+            } else {
+                SaveKind.PINNED
+            },
         ),
     )
     val state: StateFlow<State> = _state
@@ -131,16 +139,6 @@ class ShareViewModel(
     private var resolveJob: Job? = null
     /** True once the user picks a kind for this share; never persisted. */
     private var hasChosenSaveKind = false
-
-    private fun initialCapability(): ZenSpaces.NormalTabsCapability =
-        repository.cachedSnapshot?.normalTabsCapability ?: ZenSpaces.NormalTabsCapability.ABSENT
-
-    private fun initialSaveKind(): SaveKind =
-        if (initialCapability() == ZenSpaces.NormalTabsCapability.ENABLED) {
-            repository.saveKind()
-        } else {
-            SaveKind.PINNED
-        }
 
     init {
         viewModelScope.launch { bootstrap() }

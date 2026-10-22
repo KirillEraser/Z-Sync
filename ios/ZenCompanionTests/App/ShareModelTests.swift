@@ -294,6 +294,28 @@ final class ShareModelTests: XCTestCase {
         XCTAssertEqual(model.saveKind, .pinned)
     }
 
+    /// A capability downgrade must not throw away a folder the user picked
+    /// while normal tabs were still allowed.
+    func testCapabilityDowngradeKeepsThePickedFolder() async {
+        let space = space("s1", folders: [ZenCompanion.ZenFolder(id: "folder-1", name: "Folder")])
+        let session = FakeShareSession(
+            signedIn: true,
+            cached: snapshot([space], capability: .enabled),
+            fresh: snapshot([space], capability: .enabled)
+        )
+        let model = makeModel(session: session)
+        await model.bootstrap()
+        model.selectDestination(ZenCompanion.PinDestination(spaceId: "s1", folderId: "folder-1"))
+        XCTAssertEqual(model.destination.folderId, "folder-1")
+
+        session.fresh = snapshot([space], capability: .disabled)
+        await model.refreshSpaces()
+
+        XCTAssertFalse(model.allowsNormalTabs)
+        XCTAssertEqual(model.saveKind, .pinned)
+        XCTAssertEqual(model.destination, ZenCompanion.PinDestination(spaceId: "s1", folderId: "folder-1"))
+    }
+
     func testSaveWithNoSpacesFailsWithoutWrite() async {
         let session = FakeShareSession(
             signedIn: true,

@@ -156,7 +156,7 @@ struct ShareSheetView: View {
 
             if model.allowsNormalTabs {
                 saveKindMenu
-                    .padding(.top, 16)
+                    .padding(.top, 9)
                     .padding(.horizontal, 24)
             }
 
@@ -235,7 +235,10 @@ struct ShareSheetView: View {
                     .fill(Palette.lift(effectiveScheme))
             )
             .glassRimCapsule()
-            .contentShape(Capsule())
+            // Transparent margin keeps the visual pill compact while the
+            // tappable area reaches the 44 pt HIG minimum.
+            .padding(.vertical, 7)
+            .contentShape(Rectangle())
         }
         .accessibilityLabel(Text("share.save_as"))
         .accessibilityValue(Text(LocalizedStringKey(model.saveKind == .pinned ? "share.save_kind.pinned" : "share.save_kind.normal")))

@@ -401,6 +401,39 @@ class ShareViewModelTests {
         advanceUntilIdle()
     }
 
+    /** A capability downgrade must not throw away a folder the user picked
+     * while normal tabs were still allowed. */
+    @Test
+    fun capabilityDowngradeKeepsThePickedFolder() = runTest(mainDispatcherRule.testDispatcher) {
+        val space = testSpace("s1", folderId = "folder-1")
+        val repository = FakeShareRepository(
+            signedIn = true,
+            cached = testSnapshot(space, ZenSpaces.NormalTabsCapability.ENABLED),
+            fresh = testSnapshot(space, ZenSpaces.NormalTabsCapability.ENABLED),
+        )
+        val vm = ShareViewModel(
+            repository = repository,
+            initialUrl = "https://example.com/page",
+            initialPageTitle = "Page",
+        )
+        runCurrent()
+
+        vm.selectDestination(PinDestination(spaceId = "s1", folderId = "folder-1"))
+        assertEquals("folder-1", vm.state.value.destination?.folderId)
+
+        repository.fresh = testSnapshot(space, ZenSpaces.NormalTabsCapability.DISABLED)
+        vm.refreshSpaces()
+        runCurrent()
+
+        assertFalse(vm.state.value.allowsNormalTabs)
+        assertEquals(SaveKind.PINNED, vm.state.value.saveKind)
+        assertEquals(
+            PinDestination(spaceId = "s1", folderId = "folder-1"),
+            vm.state.value.destination,
+        )
+        advanceUntilIdle()
+    }
+
     @Test
     fun saveWithNoSpacesFailsWithoutRepositoryWrite() = runTest(mainDispatcherRule.testDispatcher) {
         val repository = FakeShareRepository(
@@ -424,13 +457,24 @@ class ShareViewModelTests {
     }
 }
 
-private fun testSpace(id: String): ZenSpaces.ZenSpace = ZenSpaces.ZenSpace(
+private fun testSpace(id: String, folderId: String? = null): ZenSpaces.ZenSpace = ZenSpaces.ZenSpace(
     id = id,
     name = id,
     icon = null,
     containerGuid = null,
     theme = null,
-    pinned = emptyList(),
+    pinned = folderId?.let {
+        listOf(
+            ZenSpaces.ZenItem.Folder(
+                ZenSpaces.ZenFolder(
+                    id = it,
+                    name = it,
+                    icon = null,
+                    tabs = emptyList(),
+                ),
+            ),
+        )
+    } ?: emptyList(),
 )
 
 private fun testSnapshot(

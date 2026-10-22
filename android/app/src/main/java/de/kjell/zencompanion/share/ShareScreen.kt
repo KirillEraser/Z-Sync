@@ -325,7 +325,7 @@ private fun Picker(
             SaveKindPicker(
                 selected = saveKind,
                 onSelect = onSelectSaveKind,
-                modifier = Modifier.padding(top = 16.dp, start = 24.dp, end = 24.dp),
+                modifier = Modifier.padding(top = 7.dp, start = 24.dp, end = 24.dp),
             )
         }
 
@@ -404,7 +404,10 @@ private fun SaveKindPicker(
                 .liftRim(Capsule)
                 .clickable { menuOpen = true }
                 .semantics { contentDescription = "$saveAs: $kindLabel" }
-                .padding(horizontal = 14.dp, vertical = 8.dp),
+                .padding(horizontal = 14.dp, vertical = 8.dp)
+                // Transparent margin keeps the visual pill compact while the
+                // tappable area reaches the 48 dp Material minimum.
+                .padding(vertical = 9.dp),
         ) {
             SaveKindIcon(
                 kind = selected,

@@ -231,7 +231,6 @@ final class ShareModel {
         normalTabsCapability = capability
         guard capability.allowsNormalTabs else {
             saveKind = .pinned
-            destination = PinDestination(spaceId: destination.spaceId)
             return
         }
         if !hasChosenSaveKind {
@@ -302,9 +301,11 @@ final class ShareModel {
         }
         guard let selected = selectedSpace else { return }
         phase = .saving
-        await resolveSharedTitle()
+        // Capture the user's choice before the title lookup yields: a refresh
+        // landing during the await must not change what this tap writes.
         let kind = saveKind
         let folderId = kind == .normal ? nil : destination.folderId
+        await resolveSharedTitle()
         do {
             let outcome = try await session.addTab(
                 url: url,
