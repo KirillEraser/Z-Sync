@@ -16,6 +16,7 @@ struct SettingsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var model = SettingsModel()
     @State private var isShowingSignOutConfirm: Bool = false
+    @State private var isShowingWhatsNew: Bool = false
 
     private var appVersionString: String {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
@@ -383,6 +384,37 @@ struct SettingsSheet: View {
                             .padding(.horizontal, 4)
 
                         VStack(spacing: 0) {
+                            Button {
+                                isShowingWhatsNew = true
+                            } label: {
+                                HStack {
+                                    Label {
+                                        Text("settings.whats_new")
+                                            .font(.system(size: 16, weight: .medium, design: .rounded))
+                                    } icon: {
+                                        Image(systemName: "sparkles")
+                                            .font(.system(size: 15, weight: .semibold))
+                                            .foregroundStyle(Palette.ink(scheme).opacity(0.6))
+                                    }
+                                    .foregroundStyle(Palette.ink(scheme))
+
+                                    Spacer(minLength: 8)
+
+                                    Image(systemName: "chevron.right")
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundStyle(Palette.ink(scheme).opacity(0.3))
+                                }
+                                .padding(.horizontal, 16)
+                                .frame(minHeight: 52)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(PressedButtonStyle())
+
+                            Rectangle()
+                                .fill(Palette.ink(scheme).opacity(0.15))
+                                .frame(height: 0.5)
+                                .padding(.leading, 44)
+
                             Link(destination: Legal.publicPolicyURL) {
                                 HStack {
                                     Label {
@@ -471,6 +503,11 @@ struct SettingsSheet: View {
                     model.signOut()
                 }
                 Button("common.cancel", role: .cancel) {}
+            }
+            .sheet(isPresented: $isShowingWhatsNew) {
+                WhatsNewSheet(release: WhatsNewRelease.latest, scheme: scheme)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
             }
         }
     }

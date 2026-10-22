@@ -5,8 +5,10 @@ import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import de.kjell.zencompanion.BuildConfig
 import de.kjell.zencompanion.data.AccountStore
 import de.kjell.zencompanion.data.AppEvents
+import de.kjell.zencompanion.data.AndroidWhatsNewRepository
 import de.kjell.zencompanion.data.BrowserSettings
 import de.kjell.zencompanion.data.DemoCatalog
 import de.kjell.zencompanion.data.EssentialsColumns
@@ -18,6 +20,8 @@ import de.kjell.zencompanion.data.SearchEngineValidation
 import de.kjell.zencompanion.data.SnapshotCache
 import de.kjell.zencompanion.data.SpacesSyncCacheOps
 import de.kjell.zencompanion.data.ToolbarPlacement
+import de.kjell.zencompanion.data.WhatsNewController
+import de.kjell.zencompanion.data.WhatsNewRepository
 import de.kjell.zencompanion.favicon.FaviconLoader
 import de.kjell.zencompanion.sync.FxAClient
 import de.kjell.zencompanion.sync.FxACrypto
@@ -301,6 +305,7 @@ class AppViewModel(
     private val revokeSession: suspend (String) -> Unit = { token ->
         FxAClient(transport = AccountStore.authTransport).destroySession(token)
     },
+    private val whatsNewRepository: WhatsNewRepository = AndroidWhatsNewRepository(appContext),
 ) : ViewModel() {
     // Loaded synchronously at creation so the first composed frame already
     // shows the right screen — no sign-in flash on cold start.
@@ -317,6 +322,10 @@ class AppViewModel(
 
     private val _activity = MutableStateFlow(ActivityState())
     val activity: StateFlow<ActivityState> = _activity
+
+    private val whatsNew = WhatsNewController(whatsNewRepository, BuildConfig.VERSION_NAME)
+    private val _whatsNewVisible = MutableStateFlow(false)
+    val whatsNewVisible: StateFlow<Boolean> = _whatsNewVisible
 
     private val _reviewRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val reviewRequests: SharedFlow<Unit> = _reviewRequests
@@ -436,6 +445,7 @@ class AppViewModel(
         preferencesRepository.setSyncSetupHintDismissed(false)
         _browser.value = BrowserState()
         _activity.value = ActivityState()
+        _whatsNewVisible.value = false
         if (account != null) {
             // Best effort, and not tied to this screen's lifetime.
             CoroutineScope(Dispatchers.IO).launch {
@@ -448,6 +458,27 @@ class AppViewModel(
     fun dismissSyncSetupHint() {
         preferencesRepository.setSyncSetupHintDismissed(true)
         _browser.value = _browser.value.copy(syncSetupHintDismissed = true)
+    }
+
+    /**
+     * Presents the What's New sheet once per app version. Demo mode skips it
+     * like the other onboarding prompts. Recording the version on presentation
+     * means a relaunch after the user swipes it away stays quiet.
+     */
+    fun presentWhatsNewIfNeeded() {
+        if (!whatsNew.shouldPresent(browserRepository.isDemo())) return
+        whatsNew.markPresented()
+        _whatsNewVisible.value = true
+    }
+
+    /** Reopens the same notes from Settings, regardless of the stored version. */
+    fun openWhatsNew() {
+        whatsNew.markPresented()
+        _whatsNewVisible.value = true
+    }
+
+    fun dismissWhatsNew() {
+        _whatsNewVisible.value = false
     }
 
     fun selectSpace(index: Int) {

@@ -27,6 +27,7 @@ struct SpacesBrowserView: View {
         case browser(BrowserTabSession)
         case activity
         case syncSetup
+        case whatsNew
 
         var id: String {
             switch self {
@@ -34,6 +35,7 @@ struct SpacesBrowserView: View {
             case .browser(let session): return session.id.uuidString
             case .activity: return "activity"
             case .syncSetup: return "syncSetup"
+            case .whatsNew: return "whatsNew"
             }
         }
 
@@ -43,6 +45,9 @@ struct SpacesBrowserView: View {
     }
 
     @State private var activeSheet: ActiveSheet?
+    /// Once-per-app-version release notes. Marked as presented as soon as the
+    /// sheet opens, so a relaunch does not show it again.
+    @State private var whatsNew: WhatsNewStore
     /// Locked when the browser opens. A later size-class change must not swap
     /// the sheet and the cover, or the page reloads.
     @State private var browserFillsScreen = false
@@ -87,6 +92,7 @@ struct SpacesBrowserView: View {
     init(account: AccountSnapshot) {
         self.account = account
         _model = State(initialValue: BrowserModel(account: account))
+        _whatsNew = State(initialValue: WhatsNewStore())
     }
 
     private var effectiveScheme: ColorScheme {
@@ -307,6 +313,10 @@ struct SpacesBrowserView: View {
                 })
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
+            case .whatsNew:
+                WhatsNewSheet(release: whatsNew.release, scheme: effectiveScheme)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
             }
         }
         .fullScreenCover(item: fullScreenBrowser) { session in
@@ -314,6 +324,16 @@ struct SpacesBrowserView: View {
                 .geometryGroup()
         }
         .task { await model.initialLoad() }
+        .task {
+            // Show release notes once per app version, after the first frame
+            // has had a moment to settle. Demo mode skips it like the other
+            // onboarding prompts. No sheet is open yet on a cold launch, but
+            // check anyway so a fast user action wins.
+            try? await Task.sleep(for: .milliseconds(450))
+            guard !account.isDemo, activeSheet == nil, whatsNew.shouldPresent else { return }
+            whatsNew.markPresented()
+            activeSheet = .whatsNew
+        }
         .onReceive(NotificationCenter.default.publisher(for: .zenCompanionSnapshotStale)) { _ in
             guard activeSheet == nil else {
                 pendingStaleReload = true

@@ -741,6 +741,16 @@
     "Settings" : {
 
     },
+    "settings.whats_new" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "What’s New"
+          }
+        }
+      }
+    },
     "settings.advanced" : {
       "localizations" : {
         "en" : {
@@ -1517,6 +1527,39 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "New Tab"
+          }
+        }
+      }
+    },
+    "whats_new.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "What’s New"
+          }
+        }
+      }
+    },
+    "whats_new.subtitle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Here’s what changed in this update."
+          }
+        }
+      }
+    },
+    "whats_new.continue" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Continue"
           }
         }
       }

@@ -150,6 +150,7 @@
     <string name="settings_about_section">About</string>
     <string name="settings_feedback_section">Feedback</string>
     <string name="settings_version">Version</string>
+    <string name="settings_whats_new">What\'s New</string>
     <string name="settings_sign_out_dialog_title">Sign out?</string>
     <string name="settings_sign_out_dialog_message">Are you sure you want to sign out of your Mozilla account?</string>
     <string name="settings_sign_out_confirm">Sign out</string>
@@ -181,4 +182,22 @@
     <string name="browser_reload">Reload</string>
     <string name="browser_stop">Stop</string>
     <string name="browser_clear_search">Clear search</string>
+
+    <string name="whats_new_title">What\'s New</string>
+    <string name="whats_new_subtitle">Here\'s what changed in this update.</string>
+    <string name="whats_new_continue">Continue</string>
+    <string name="whats_new_item_share_title">Choose pin or normal when sharing</string>
+    <string name="whats_new_item_share_detail">A new Save as menu in the share sheet saves each link as a pinned or normal tab, without changing your default.</string>
+    <string name="whats_new_item_errors_title">Clearer browser errors</string>
+    <string name="whats_new_item_errors_detail">When a page is offline, can\'t be found, or has a certificate problem, the quick browser says what happened and offers to try again.</string>
+    <string name="whats_new_item_essentials_title">Set essentials per row</string>
+    <string name="whats_new_item_essentials_detail">Pick how many essentials fit on a row under Advanced. Short rows now stretch to fill the width.</string>
+    <string name="whats_new_item_search_title">Open straight into search</string>
+    <string name="whats_new_item_search_detail">Turn on Open into search to open a fresh search tab whenever you come back to the app.</string>
+    <string name="whats_new_item_folders_title">Folders do more</string>
+    <string name="whats_new_item_folders_detail">Move pinned tabs into folders from the tab menu, and synced folder icons now show inside the folder flap.</string>
+    <string name="whats_new_item_rotation_title">Keep your page on rotation</string>
+    <string name="whats_new_item_rotation_detail">Rotating your device no longer reloads the quick browser or loses the page you were reading.</string>
+    <string name="whats_new_item_sync_title">Steadier sync</string>
+    <string name="whats_new_item_sync_detail">If a refresh fails, your spaces stay put and a short message explains why. Expired sign-ins now recover cleanly.</string>
 </resources>
