@@ -115,23 +115,22 @@ print -- "$CERTS" | grep -qi "$EXPECTED_SIGNER" || die \
 rm -rf "$STAGE"
 mkdir -p "$STAGE"
 cp "$APK" "$STAGE/$ASSET"
-(cd "$STAGE" && shasum -a 256 "$ASSET" > SHA256SUMS.txt)
 
 print -- ""
 print -- "Signature : $EXPECTED_SIGNER"
-print -- "Checksum  : $(cat "$STAGE/SHA256SUMS.txt")"
+print -- "SHA-256   : $(shasum -a 256 "$APK" | cut -d' ' -f1)"
 print -- ""
 
 # --- upload ----------------------------------------------------------------
 
 if (( DRY_RUN )); then
   print -- "Dry run, nothing uploaded. The real command would be:"
-  print -- "  gh release upload $TAG -R $REPO $STAGE/$ASSET $STAGE/SHA256SUMS.txt --clobber"
+  print -- "  gh release upload $TAG -R $REPO $STAGE/$ASSET --clobber"
   exit 0
 fi
 
 print -- "Uploading to $TAG …"
-gh release upload "$TAG" -R "$REPO" "$STAGE/$ASSET" "$STAGE/SHA256SUMS.txt" --clobber
+gh release upload "$TAG" -R "$REPO" "$STAGE/$ASSET" --clobber
 
 print -- ""
 print -- "Assets on $TAG:"
