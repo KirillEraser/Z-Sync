@@ -18,6 +18,8 @@ enum PreferenceKeys {
     static let toolbarPlacement = "toolbar_placement"
     static let openIntoSearch = "open_into_search"
     static let essentialsColumns = "essentials_columns"
+    /// Marketing version whose What's New sheet was already presented.
+    static let whatsNewShownVersion = "whatsNewShownVersion"
 }
 
 enum PreferenceScope {

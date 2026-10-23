@@ -36,8 +36,10 @@ import de.kjell.zencompanion.ui.screens.SpacesBrowserScreen
 import de.kjell.zencompanion.ui.sheets.SettingsSheet
 import de.kjell.zencompanion.ui.sheets.SignInHelpSheet
 import de.kjell.zencompanion.ui.sheets.SyncedActivitySheet
+import de.kjell.zencompanion.ui.sheets.WhatsNewSheet
 import de.kjell.zencompanion.ui.sheets.ZenSheet
 import de.kjell.zencompanion.ui.theme.ZenTheme
+import kotlinx.coroutines.delay
 
 /** One mini-browser launch; [id] keys the ViewModel so a new open starts clean. */
 private data class BrowserLaunch(val url: String?, val title: String?, val id: Int)
@@ -127,6 +129,7 @@ private fun SpacesBrowserRoot(viewModel: AppViewModel) {
     val session by viewModel.session.collectAsState()
     val preferences by viewModel.preferences.collectAsState()
     val activityState by viewModel.activity.collectAsState()
+    val whatsNewVisible by viewModel.whatsNewVisible.collectAsState()
     val account = session ?: return
 
     var showSettings by rememberSaveable { mutableStateOf(false) }
@@ -139,6 +142,15 @@ private fun SpacesBrowserRoot(viewModel: AppViewModel) {
         viewModel.reviewRequests.collect {
             (context as? Activity)?.let { PlayInAppReview.request(it) }
         }
+    }
+
+    // Once per app version, after the first frame has had a moment to settle.
+    // Only the main activity reaches this: sharing from another app opens
+    // ShareActivity, which never builds AppViewModel, so a share cannot
+    // trigger the sheet.
+    LaunchedEffect(Unit) {
+        delay(450)
+        viewModel.presentWhatsNewIfNeeded()
     }
 
     val spaces = browser.snapshot.spaces
@@ -258,7 +270,15 @@ private fun SpacesBrowserRoot(viewModel: AppViewModel) {
                 de.kjell.zencompanion.ui.screens.FxAWeb.wipeWebSession()
                 viewModel.signOut()
             },
+            onOpenWhatsNew = {
+                showSettings = false
+                viewModel.openWhatsNew()
+            },
             onDone = { showSettings = false },
         )
+    }
+
+    if (whatsNewVisible) {
+        WhatsNewSheet(onDismiss = { viewModel.dismissWhatsNew() })
     }
 }

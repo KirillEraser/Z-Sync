@@ -9,6 +9,7 @@ import de.kjell.zencompanion.data.SaveKind
 import de.kjell.zencompanion.data.SearchEngine
 import de.kjell.zencompanion.data.SnapshotCache
 import de.kjell.zencompanion.data.ToolbarPlacement
+import de.kjell.zencompanion.data.WhatsNewRepository
 import de.kjell.zencompanion.sync.SpacesSyncService
 import de.kjell.zencompanion.sync.SyncError
 import de.kjell.zencompanion.sync.SyncedActivityService
@@ -80,7 +81,17 @@ class AppViewModelTests {
         browser: FakeBrowserRepository = FakeBrowserRepository(),
         preferences: PreferencesRepository = FakePreferencesRepository(),
         activity: ActivityRepository = FakeActivityRepository(),
-    ) = AppViewModel(context, login, browser, preferences, activity)
+        whatsNew: WhatsNewRepository = FakeWhatsNewRepository(),
+        appVersion: String = "1.5",
+    ) = AppViewModel(
+        context,
+        login,
+        browser,
+        preferences,
+        activity,
+        whatsNewRepository = whatsNew,
+        appVersion = appVersion,
+    )
 
     @Test
     fun completeWebLoginSuccessSetsSession() = runTest(mainDispatcherRule.testDispatcher) {
@@ -573,6 +584,79 @@ class AppViewModelTests {
         runCurrent()
         assertEquals(1, received.size)
         assertTrue(prefs.reviewRequested)
+    }
+
+    // What's New
+
+    @Test
+    fun whatsNewPresentsOncePerRelease() = runTest(mainDispatcherRule.testDispatcher) {
+        val repo = FakeWhatsNewRepository()
+        val vm = newViewModel(whatsNew = repo, appVersion = "1.5")
+
+        vm.presentWhatsNewIfNeeded()
+        assertTrue(vm.whatsNewVisible.value)
+        assertEquals("1.5", repo.version)
+
+        vm.dismissWhatsNew()
+        vm.presentWhatsNewIfNeeded()
+        assertFalse(vm.whatsNewVisible.value)
+    }
+
+    @Test
+    fun whatsNewPresentsForTheReleaseVersionOnly() = runTest(mainDispatcherRule.testDispatcher) {
+        val repo = FakeWhatsNewRepository()
+        val vm = newViewModel(whatsNew = repo, appVersion = "1.4.1")
+
+        vm.presentWhatsNewIfNeeded()
+
+        assertFalse(vm.whatsNewVisible.value)
+        assertNull(repo.version)
+    }
+
+    @Test
+    fun whatsNewPresentsAgainForANewerStoredVersion() = runTest(mainDispatcherRule.testDispatcher) {
+        val repo = FakeWhatsNewRepository(version = "1.4.0")
+        val vm = newViewModel(whatsNew = repo, appVersion = "1.5")
+
+        vm.presentWhatsNewIfNeeded()
+
+        assertTrue(vm.whatsNewVisible.value)
+        assertEquals("1.5", repo.version)
+    }
+
+    @Test
+    fun whatsNewCanBeReopenedFromSettingsEvenAfterItWasShown() = runTest(mainDispatcherRule.testDispatcher) {
+        val vm = newViewModel(
+            whatsNew = FakeWhatsNewRepository(version = "1.5"),
+            appVersion = "1.5",
+        )
+        assertFalse(vm.whatsNewVisible.value)
+
+        vm.openWhatsNew()
+
+        assertTrue(vm.whatsNewVisible.value)
+        vm.dismissWhatsNew()
+        assertFalse(vm.whatsNewVisible.value)
+    }
+
+    @Test
+    fun whatsNewDoesNotAutoPresentInDemoMode() = runTest(mainDispatcherRule.testDispatcher) {
+        val browser = FakeBrowserRepository().apply { demo = true }
+        val repo = FakeWhatsNewRepository()
+        val vm = newViewModel(browser = browser, whatsNew = repo, appVersion = "1.5")
+
+        vm.presentWhatsNewIfNeeded()
+
+        assertFalse(vm.whatsNewVisible.value)
+        assertNull(repo.version)
+    }
+}
+
+private class FakeWhatsNewRepository(var version: String? = null) : WhatsNewRepository {
+    override fun shownVersion(): String? = version
+
+    override fun setShownVersion(version: String) {
+        this.version = version
     }
 }
 
