@@ -163,7 +163,7 @@ struct ShareSheetView: View {
                     .disabled(model.phase == .saving)
                     .opacity(model.phase == .saving ? 0.55 : 1)
                     .allowsHitTesting(model.phase != .saving)
-                    .padding(.top, 9)
+                    .padding(.top, 16)
                     .padding(.horizontal, 24)
             }
 
@@ -235,8 +235,8 @@ struct ShareSheetView: View {
                     .opacity(0.45)
             }
             .foregroundStyle(Palette.ink(effectiveScheme))
-            .padding(.horizontal, 15)
-            .padding(.vertical, 8)
+            .padding(.horizontal, 13)
+            .padding(.vertical, 6)
             .background(
                 Capsule(style: .continuous)
                     .fill(Palette.lift(effectiveScheme))
@@ -244,7 +244,7 @@ struct ShareSheetView: View {
             .glassRimCapsule()
             // Transparent margin keeps the visual pill compact while the
             // tappable area reaches the 44 pt HIG minimum.
-            .padding(.vertical, 7)
+            .padding(.vertical, 8)
             .contentShape(Rectangle())
         }
         .accessibilityLabel(Text("share.save_as"))
