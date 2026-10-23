@@ -153,9 +153,16 @@ struct ShareSheetView: View {
             .padding(.top, 28)
             .padding(.horizontal, 24)
             .accessibilityLabel(Text("share.workspace"))
+            // The write is already in flight; changing the target or the kind
+            // now could only contradict what is being written.
+            .opacity(model.phase == .saving ? 0.55 : 1)
+            .allowsHitTesting(model.phase != .saving)
 
             if model.allowsNormalTabs {
                 saveKindMenu
+                    .disabled(model.phase == .saving)
+                    .opacity(model.phase == .saving ? 0.55 : 1)
+                    .allowsHitTesting(model.phase != .saving)
                     .padding(.top, 9)
                     .padding(.horizontal, 24)
             }

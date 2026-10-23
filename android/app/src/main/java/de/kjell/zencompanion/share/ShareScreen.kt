@@ -36,6 +36,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.platform.LocalContext
@@ -318,6 +319,9 @@ private fun Picker(
                 onMenuDidDismiss = {},
                 style = PinDestinationPickerStyle.ShareCapsule,
                 hideFolders = hideFolders,
+                // The write is already in flight; changing the destination
+                // now could only contradict what is being written.
+                enabled = !saving,
             )
         }
 
@@ -325,6 +329,7 @@ private fun Picker(
             SaveKindPicker(
                 selected = saveKind,
                 onSelect = onSelectSaveKind,
+                enabled = !saving,
                 modifier = Modifier.padding(top = 7.dp, start = 24.dp, end = 24.dp),
             )
         }
@@ -385,6 +390,7 @@ private fun SaveKindPicker(
     selected: SaveKind,
     onSelect: (SaveKind) -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
 ) {
     val colors = LocalZenColors.current
     val saveAs = stringResource(R.string.share_save_as)
@@ -400,9 +406,10 @@ private fun SaveKindPicker(
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
+                .alpha(if (enabled) 1f else 0.55f)
                 .background(colors.lift, Capsule)
                 .liftRim(Capsule)
-                .clickable { menuOpen = true }
+                .clickable(enabled = enabled) { menuOpen = true }
                 .semantics { contentDescription = "$saveAs: $kindLabel" }
                 .padding(horizontal = 14.dp, vertical = 8.dp)
                 // Transparent margin keeps the visual pill compact while the

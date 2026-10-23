@@ -35,6 +35,8 @@ fun PinDestinationPicker(
     style: PinDestinationPickerStyle = PinDestinationPickerStyle.BrowserBanner,
     /** Normal saves always target the space root, so folder rows are hidden. */
     hideFolders: Boolean = false,
+    /** False while a save is in flight, so the target cannot change mid-write. */
+    enabled: Boolean = true,
 ) {
     when (style) {
         PinDestinationPickerStyle.BrowserBanner -> BrowserBannerPicker(
@@ -63,6 +65,7 @@ fun PinDestinationPicker(
             onMenuDidDismiss = onMenuDidDismiss,
             modifier = modifier,
             hideFolders = hideFolders,
+            enabled = enabled,
         )
     }
 }
