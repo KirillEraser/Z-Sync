@@ -1564,6 +1564,28 @@
         }
       }
     },
+    "whats_new.done" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Done"
+          }
+        }
+      }
+    },
+    "whats_new.page2_title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "More in this update"
+          }
+        }
+      }
+    },
     "tabs.unsplit" : {
       "extractionState" : "manual",
       "localizations" : {

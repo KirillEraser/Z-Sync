@@ -61,6 +61,15 @@ struct WhatsNewRelease: Equatable {
             detail: "If a refresh fails, your spaces stay put and a short message explains why. Expired sign-ins now recover cleanly."
         )
     ])
+
+    /// Balanced split into at most two pages, so the sheet reads as a short
+    /// two-step update instead of one long scroll. With the current seven
+    /// items that is 4 + 3.
+    var pages: [[WhatsNewItem]] {
+        guard items.count > 1 else { return [items] }
+        let midpoint = (items.count + 1) / 2
+        return [Array(items.prefix(midpoint)), Array(items.dropFirst(midpoint))]
+    }
 }
 
 /// Remembers the app version whose notes were already shown. The current app

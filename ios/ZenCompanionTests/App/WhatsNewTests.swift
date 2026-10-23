@@ -80,6 +80,28 @@ final class WhatsNewTests: XCTestCase {
         XCTAssertTrue(ids.contains("browser-error-panel"))
     }
 
+    func testReleaseSplitsIntoTwoPagesWithoutLosingItems() {
+        let release = WhatsNewRelease.latest
+        let pages = release.pages
+
+        XCTAssertEqual(pages.count, 2)
+        XCTAssertEqual(pages.flatMap { $0 }, release.items)
+        XCTAssertFalse(pages[0].isEmpty)
+        XCTAssertFalse(pages[1].isEmpty)
+        XCTAssertLessThanOrEqual(abs(pages[0].count - pages[1].count), 1)
+    }
+
+    func testEmptyOrSingleItemReleaseStaysOnOnePage() {
+        XCTAssertEqual(WhatsNewRelease(items: []).pages.count, 1)
+        let only = WhatsNewItem(
+            id: "only",
+            systemImage: "sparkles",
+            title: "Only",
+            detail: "Single item"
+        )
+        XCTAssertEqual(WhatsNewRelease(items: [only]).pages, [[only]])
+    }
+
     func testCopyStaysConcise() {
         for item in WhatsNewRelease.latest.items {
             XCTAssertLessThanOrEqual(item.title.count, 48, "\(item.id) title is too long")

@@ -76,6 +76,18 @@ object WhatsNewRelease {
             icon = WhatsNewIcon.SYNC,
         ),
     )
+
+    /**
+     * Balanced split into at most two pages, so the sheet reads as a short
+     * two-step update instead of one long scroll. With the current seven
+     * items that is 4 + 3.
+     */
+    val pages: List<List<WhatsNewItem>> = if (items.size <= 1) {
+        listOf(items)
+    } else {
+        val midpoint = (items.size + 1) / 2
+        listOf(items.take(midpoint), items.drop(midpoint))
+    }
 }
 
 /** Storage seam for the app version whose notes were already shown. */

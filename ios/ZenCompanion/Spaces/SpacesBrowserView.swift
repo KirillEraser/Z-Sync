@@ -327,8 +327,9 @@ struct SpacesBrowserView: View {
         .task {
             // Show release notes once per app version, after the first frame
             // has had a moment to settle. Demo mode skips it like the other
-            // onboarding prompts. No sheet is open yet on a cold launch, but
-            // check anyway so a fast user action wins.
+            // onboarding prompts. Only the main spaces screen reaches this
+            // task: the Share Extension has its own view controller, so
+            // sharing a link never triggers the sheet.
             try? await Task.sleep(for: .milliseconds(450))
             guard !account.isDemo, activeSheet == nil, whatsNew.shouldPresent else { return }
             whatsNew.markPresented()

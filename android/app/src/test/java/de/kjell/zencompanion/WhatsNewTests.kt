@@ -94,6 +94,17 @@ class WhatsNewTests {
     }
 
     @Test
+    fun releaseSplitsIntoTwoBalancedPages() {
+        val pages = WhatsNewRelease.pages
+
+        assertEquals(2, pages.size)
+        assertEquals(WhatsNewRelease.items, pages.flatten())
+        assertTrue(pages[0].isNotEmpty())
+        assertTrue(pages[1].isNotEmpty())
+        assertTrue(kotlin.math.abs(pages[0].size - pages[1].size) <= 1)
+    }
+
+    @Test
     fun everyIconIsMapped() {
         // The sheet maps every enum case to a Material icon; a new case must
         // not silently render as a blank badge.

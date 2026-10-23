@@ -145,6 +145,9 @@ private fun SpacesBrowserRoot(viewModel: AppViewModel) {
     }
 
     // Once per app version, after the first frame has had a moment to settle.
+    // Only the main activity reaches this: sharing from another app opens
+    // ShareActivity, which never builds AppViewModel, so a share cannot
+    // trigger the sheet.
     LaunchedEffect(Unit) {
         delay(450)
         viewModel.presentWhatsNewIfNeeded()
