@@ -226,7 +226,7 @@ struct ShareSheetView: View {
             }
             .pickerStyle(.inline)
         } label: {
-            Image(systemName: model.saveKind == .pinned ? "pin.fill" : "rectangle.stack.fill")
+            Image(systemName: model.saveKind == .pinned ? "pin.fill" : "rectangle.stack")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(Palette.ink(effectiveScheme))
                 .frame(width: 44, height: 44)
