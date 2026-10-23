@@ -1,10 +1,13 @@
 package de.kjell.zencompanion.share
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,9 +18,14 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -27,13 +35,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import de.kjell.zencompanion.R
 import de.kjell.zencompanion.data.SaveKind
@@ -48,6 +63,7 @@ import de.kjell.zencompanion.ui.motion.DampingShareResult
 import de.kjell.zencompanion.ui.motion.StiffnessShareResult
 import de.kjell.zencompanion.ui.theme.LocalZenColors
 import de.kjell.zencompanion.ui.theme.ZenType
+import de.kjell.zencompanion.ui.theme.liftRim
 import de.kjell.zencompanion.util.Haptics
 import de.kjell.zencompanion.util.PageTitle
 
@@ -80,7 +96,9 @@ fun ShareScreen(
     errorText: String?,
     saveKind: SaveKind = SaveKind.PINNED,
     savedAsPinnedFallback: Boolean = false,
+    allowsNormalTabs: Boolean = false,
     onSelectDestination: (PinDestination) -> Unit,
+    onSelectSaveKind: (SaveKind) -> Unit = {},
     onSave: () -> Unit,
     onCancel: () -> Unit,
 ) {
@@ -153,7 +171,9 @@ fun ShareScreen(
                     saving = phase == SharePhase.saving,
                     hideFolders = saveKind == SaveKind.NORMAL,
                     saveKind = saveKind,
+                    allowsNormalTabs = allowsNormalTabs,
                     onSelectDestination = onSelectDestination,
+                    onSelectSaveKind = onSelectSaveKind,
                     onSave = onSave,
                     onCancel = onCancel,
                 )
@@ -236,7 +256,9 @@ private fun Picker(
     saving: Boolean,
     hideFolders: Boolean,
     saveKind: SaveKind,
+    allowsNormalTabs: Boolean,
     onSelectDestination: (PinDestination) -> Unit,
+    onSelectSaveKind: (SaveKind) -> Unit,
     onSave: () -> Unit,
     onCancel: () -> Unit,
 ) {
@@ -282,7 +304,11 @@ private fun Picker(
         // groups where folders appear as indented plain-text rows.
         var menuOpen by remember { mutableStateOf(false) }
         var folderMenuOpen by remember { mutableStateOf(false) }
-        Box {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.padding(horizontal = 24.dp),
+        ) {
             PinDestinationPicker(
                 spaces = spaces,
                 selected = selected,
@@ -296,9 +322,21 @@ private fun Picker(
                 onFolderMenuOpenChange = { folderMenuOpen = it },
                 onMenuWillOpen = {},
                 onMenuDidDismiss = {},
+                modifier = Modifier.weight(1f, fill = false),
                 style = PinDestinationPickerStyle.ShareCapsule,
                 hideFolders = hideFolders,
+                // The write is already in flight; changing the destination
+                // now could only contradict what is being written.
+                enabled = !saving,
             )
+
+            if (allowsNormalTabs) {
+                SaveKindMenuButton(
+                    selected = saveKind,
+                    onSelect = onSelectSaveKind,
+                    enabled = !saving,
+                )
+            }
         }
 
         Spacer(Modifier.weight(1f))
@@ -344,6 +382,124 @@ private fun Picker(
                 )
             }
         }
+    }
+}
+
+/**
+ * Round per-share kind menu beside the destination pill. It keeps the
+ * pin/tab-stack look and opens the pinned/normal choice on tap. Only shown
+ * when the synced browser can write normal tabs; leaving it untouched keeps
+ * the persisted setting.
+ */
+@Composable
+private fun SaveKindMenuButton(
+    selected: SaveKind,
+    onSelect: (SaveKind) -> Unit,
+    enabled: Boolean = true,
+) {
+    val colors = LocalZenColors.current
+    val context = LocalContext.current
+    val saveAs = stringResource(R.string.share_save_as)
+    val kindLabel = stringResource(
+        if (selected == SaveKind.PINNED) {
+            R.string.share_save_kind_pinned
+        } else {
+            R.string.share_save_kind_normal
+        },
+    )
+    var menuOpen by remember { mutableStateOf(false) }
+    // Matches the destination pill's own top inset, so both sit on one line.
+    Box(Modifier.padding(top = 28.dp)) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .size(48.dp)
+                .clickable(enabled = enabled) { menuOpen = true }
+                .semantics {
+                    contentDescription = saveAs
+                    stateDescription = kindLabel
+                },
+        ) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .size(44.dp)
+                    .alpha(if (enabled) 1f else 0.55f)
+                    .background(colors.lift, CircleShape)
+                    .liftRim(CircleShape),
+            ) {
+                SaveKindIcon(
+                    kind = selected,
+                    size = 16.dp,
+                    tint = colors.ink,
+                )
+            }
+        }
+
+        DropdownMenu(
+            expanded = menuOpen,
+            onDismissRequest = { menuOpen = false },
+        ) {
+            for (kind in SaveKind.entries) {
+                val isSelected = selected == kind
+                DropdownMenuItem(
+                    modifier = Modifier.semantics { this.selected = isSelected },
+                    text = {
+                        Text(
+                            text = stringResource(
+                                if (kind == SaveKind.PINNED) {
+                                    R.string.share_save_kind_pinned_menu
+                                } else {
+                                    R.string.share_save_kind_normal_menu
+                                },
+                            ),
+                            style = ZenType.rounded(15, FontWeight.Medium),
+                        )
+                    },
+                    leadingIcon = {
+                        SaveKindIcon(
+                            kind = kind,
+                            size = 18.dp,
+                            tint = colors.ink,
+                        )
+                    },
+                    trailingIcon = {
+                        if (isSelected) {
+                            Image(
+                                painter = painterResource(R.drawable.ic_checkmark),
+                                contentDescription = null,
+                                colorFilter = ColorFilter.tint(colors.ink),
+                                modifier = Modifier.size(14.dp),
+                            )
+                        }
+                    },
+                    onClick = {
+                        menuOpen = false
+                        Haptics.perform(context, Haptics.Kind.SELECTION)
+                        onSelect(kind)
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SaveKindIcon(kind: SaveKind, size: Dp, tint: Color) {
+    if (kind == SaveKind.PINNED) {
+        Icon(
+            imageVector = Icons.Filled.PushPin,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(size),
+        )
+    } else {
+        Icon(
+            painter = painterResource(R.drawable.ic_tab_stack),
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(size),
+        )
     }
 }
 

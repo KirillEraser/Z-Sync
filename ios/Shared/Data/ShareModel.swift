@@ -121,10 +121,18 @@ final class ShareModel {
     var destination = PinDestination(spaceId: "")
     var phase: Phase = .loading
     var error: String?
+    /// Pinned or normal for *this* share. Starts at the persisted setting and
+    /// is only changed by the user in this sheet; it is never written back.
     var saveKind: SaveKind = .pinned
     var savedAsPinnedFallback = false
+    /// The synced browser's normal-tabs capability. Normal is impossible
+    /// unless this is `.enabled` (SPEC §7), so the per-share choice is hidden
+    /// until the browser proves it can write normal records.
+    private(set) var normalTabsCapability: NormalTabsCapability = .absent
     /// Set when the auto-close delay elapses after a successful save.
     var didFinish = false
+
+    var allowsNormalTabs: Bool { normalTabsCapability.allowsNormalTabs }
 
     var hideFolders: Bool { saveKind == .normal }
 
@@ -152,6 +160,9 @@ final class ShareModel {
     private let session: ShareSessioning
     private let sleep: (Duration) async -> Void
     private let titleResolver: @Sendable (String, URL) async -> String?
+    /// The saved setting, applied until the user overrides this share.
+    private let preferredSaveKind: SaveKind
+    @ObservationIgnored private var hasChosenSaveKind = false
     @ObservationIgnored private var resolveTask: Task<Void, Never>?
 
     init(
@@ -161,12 +172,15 @@ final class ShareModel {
         sleep: @escaping (Duration) async -> Void = { try? await Task.sleep(for: $0) },
         titleResolver: @escaping @Sendable (String, URL) async -> String? = { _, _ in nil }
     ) {
+        let cachedCapability = session.cachedSnapshot()?.normalTabsCapability ?? .absent
         self.session = session
         self.pageTitle = pageTitle
         self.url = url
         self.sleep = sleep
         self.titleResolver = titleResolver
-        self.saveKind = session.saveKind()
+        self.preferredSaveKind = session.saveKind()
+        self.normalTabsCapability = cachedCapability
+        self.saveKind = cachedCapability.allowsNormalTabs ? preferredSaveKind : .pinned
     }
 
     /// Replaces a missing or URL-shaped name with the page's real title.
@@ -196,12 +210,42 @@ final class ShareModel {
             : chosen
     }
 
+    /// Per-share override from the sheet's save-kind control. Deliberately
+    /// does not touch the persisted setting: the next share starts at the
+    /// saved default again.
+    func selectSaveKind(_ kind: SaveKind) {
+        guard kind == .pinned || allowsNormalTabs else { return }
+        hasChosenSaveKind = true
+        guard kind != saveKind else { return }
+        saveKind = kind
+        // A normal tab always lands at the space root, so drop a folder that
+        // belonged to the pinned choice.
+        if kind == .normal {
+            destination = PinDestination(spaceId: destination.spaceId)
+        }
+    }
+
+    /// Applies the synced capability without clobbering a choice the user
+    /// already made in this sheet.
+    private func applyCapability(_ capability: NormalTabsCapability) {
+        normalTabsCapability = capability
+        guard capability.allowsNormalTabs else {
+            saveKind = .pinned
+            return
+        }
+        if !hasChosenSaveKind {
+            saveKind = preferredSaveKind
+        }
+    }
+
     func bootstrap() async {
         guard session.isSignedIn() else {
             phase = .signedOut
             return
         }
-        saveKind = session.saveKind()
+        if let cached = session.cachedSnapshot() {
+            applyCapability(cached.normalTabsCapability)
+        }
 
         if let cached = session.cachedSnapshot(), !cached.spaces.isEmpty {
             spaces = cached.spaces
@@ -225,6 +269,7 @@ final class ShareModel {
                 return
             }
             spaces = fresh.spaces
+            applyCapability(fresh.normalTabsCapability)
             if !fresh.spaces.contains(where: { $0.id == destination.spaceId }) {
                 destination = lastDestination(fallback: fresh.spaces)
             } else if hideFolders {
@@ -256,9 +301,11 @@ final class ShareModel {
         }
         guard let selected = selectedSpace else { return }
         phase = .saving
-        await resolveSharedTitle()
+        // Capture the user's choice before the title lookup yields: a refresh
+        // landing during the await must not change what this tap writes.
         let kind = saveKind
         let folderId = kind == .normal ? nil : destination.folderId
+        await resolveSharedTitle()
         do {
             let outcome = try await session.addTab(
                 url: url,

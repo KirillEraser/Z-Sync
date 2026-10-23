@@ -98,18 +98,37 @@ class ShareViewModel(
         val errorText: String? = null,
         /** Pinned (default) or normal tab for this save. */
         val saveKind: SaveKind = SaveKind.PINNED,
+        /**
+         * The synced browser's normal-tabs capability. Normal is impossible
+         * unless this is ENABLED (SPEC §7), so the per-share choice stays
+         * hidden until the browser proves it can write normal records.
+         */
+        val normalTabsCapability: ZenSpaces.NormalTabsCapability = ZenSpaces.NormalTabsCapability.ABSENT,
         /** True when the requested normal save fell back to a pinned record. */
         val savedAsPinnedFallback: Boolean = false,
     ) {
         /** Normal saves always target the space root, so folders are hidden. */
         val hideFolders: Boolean get() = saveKind == SaveKind.NORMAL
+
+        /** Whether the sheet may offer the per-share normal option. */
+        val allowsNormalTabs: Boolean
+            get() = normalTabsCapability == ZenSpaces.NormalTabsCapability.ENABLED
     }
+
+    /** One cached read for both initial fields, so they cannot disagree. */
+    private val initialCapability: ZenSpaces.NormalTabsCapability =
+        repository.cachedSnapshot?.normalTabsCapability ?: ZenSpaces.NormalTabsCapability.ABSENT
 
     private val _state = MutableStateFlow(
         State(
             url = initialUrl,
             pageTitle = initialPageTitle,
-            saveKind = repository.saveKind(),
+            normalTabsCapability = initialCapability,
+            saveKind = if (initialCapability == ZenSpaces.NormalTabsCapability.ENABLED) {
+                repository.saveKind()
+            } else {
+                SaveKind.PINNED
+            },
         ),
     )
     val state: StateFlow<State> = _state
@@ -118,6 +137,8 @@ class ShareViewModel(
     val events: SharedFlow<Event> = _events
 
     private var resolveJob: Job? = null
+    /** True once the user picks a kind for this share; never persisted. */
+    private var hasChosenSaveKind = false
 
     init {
         viewModelScope.launch { bootstrap() }
@@ -152,6 +173,49 @@ class ShareViewModel(
         _state.update { it.copy(destination = forced) }
     }
 
+    /**
+     * Per-share override from the sheet's save-kind control. Deliberately
+     * does not touch the persisted setting: the next share starts at the
+     * saved default again.
+     */
+    fun selectSaveKind(kind: SaveKind) {
+        if (kind == SaveKind.NORMAL && !_state.value.allowsNormalTabs) return
+        hasChosenSaveKind = true
+        if (_state.value.saveKind == kind) return
+        _state.update { current ->
+            current.copy(
+                saveKind = kind,
+                // A normal tab always lands at the space root, so drop a
+                // folder that belonged to the pinned choice.
+                destination = if (kind == SaveKind.NORMAL) {
+                    current.destination?.copy(folderId = null)
+                } else {
+                    current.destination
+                },
+            )
+        }
+    }
+
+    /** Applies the synced capability without clobbering this share's choice. */
+    private fun applyCapability(capability: ZenSpaces.NormalTabsCapability) {
+        _state.update { current ->
+            val kind = when {
+                capability != ZenSpaces.NormalTabsCapability.ENABLED -> SaveKind.PINNED
+                !hasChosenSaveKind -> repository.saveKind()
+                else -> current.saveKind
+            }
+            current.copy(
+                normalTabsCapability = capability,
+                saveKind = kind,
+                destination = if (kind == SaveKind.NORMAL) {
+                    current.destination?.copy(folderId = null)
+                } else {
+                    current.destination
+                },
+            )
+        }
+    }
+
     fun save() {
         viewModelScope.launch { performSave() }
     }
@@ -166,6 +230,8 @@ class ShareViewModel(
             _state.update { it.copy(phase = SharePhase.signedOut) }
             return
         }
+
+        repository.cachedSnapshot?.let { applyCapability(it.normalTabsCapability) }
 
         repository.cachedSnapshot?.let { cached ->
             if (cached.spaces.isNotEmpty()) {
@@ -197,6 +263,7 @@ class ShareViewModel(
                 }
                 return
             }
+            applyCapability(fresh.normalTabsCapability)
             val current = _state.value
             val currentId = current.destination?.spaceId
             val destination = if (currentId == null || fresh.spaces.none { it.id == currentId }) {

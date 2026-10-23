@@ -15,6 +15,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -189,8 +190,8 @@ class ShareViewModelTests {
         val space = testSpace("s1")
         val repository = FakeShareRepository(
             signedIn = true,
-            cached = ZenSpaces.ZenSnapshot(listOf(space)),
-            fresh = ZenSpaces.ZenSnapshot(listOf(space)),
+            cached = ZenSpaces.ZenSnapshot(listOf(space), emptyMap(), 0L, normalTabsCapability = ZenSpaces.NormalTabsCapability.ENABLED),
+            fresh = ZenSpaces.ZenSnapshot(listOf(space), emptyMap(), 0L, normalTabsCapability = ZenSpaces.NormalTabsCapability.ENABLED),
             saveKind = SaveKind.NORMAL,
             fallBackToPinned = true,
         )
@@ -261,6 +262,207 @@ class ShareViewModelTests {
     }
 
     @Test
+    fun perShareNormalChoiceSavesNormalAndLeavesTheSavedDefaultAlone() = runTest(mainDispatcherRule.testDispatcher) {
+        val space = testSpace("s1")
+        val repository = FakeShareRepository(
+            signedIn = true,
+            cached = testSnapshot(space, ZenSpaces.NormalTabsCapability.ENABLED),
+            fresh = testSnapshot(space, ZenSpaces.NormalTabsCapability.ENABLED),
+            saveKind = SaveKind.PINNED,
+        )
+        val vm = ShareViewModel(
+            repository = repository,
+            initialUrl = "https://example.com/page",
+            initialPageTitle = "Page",
+        )
+        runCurrent()
+
+        assertTrue(vm.state.value.allowsNormalTabs)
+        vm.selectDestination(PinDestination(spaceId = "s1", folderId = "folder-1"))
+        vm.selectSaveKind(SaveKind.NORMAL)
+
+        assertEquals(SaveKind.NORMAL, vm.state.value.saveKind)
+        assertEquals(PinDestination(spaceId = "s1"), vm.state.value.destination)
+
+        vm.save()
+        runCurrent()
+
+        assertEquals(1, repository.added.size)
+        assertEquals(SaveKind.NORMAL, repository.added[0].kind)
+        assertNull(repository.added[0].folderId)
+
+        // The next share starts from the persisted setting again.
+        val next = ShareViewModel(
+            repository = repository,
+            initialUrl = "https://example.com/page",
+            initialPageTitle = "Page",
+        )
+        runCurrent()
+        assertEquals(SaveKind.PINNED, next.state.value.saveKind)
+        advanceUntilIdle()
+    }
+
+    @Test
+    fun pinnedOverrideForOneShareDoesNotChangeTheSavedDefault() = runTest(mainDispatcherRule.testDispatcher) {
+        val space = testSpace("s1")
+        val repository = FakeShareRepository(
+            signedIn = true,
+            cached = testSnapshot(space, ZenSpaces.NormalTabsCapability.ENABLED),
+            fresh = testSnapshot(space, ZenSpaces.NormalTabsCapability.ENABLED),
+            saveKind = SaveKind.NORMAL,
+        )
+        val vm = ShareViewModel(
+            repository = repository,
+            initialUrl = "https://example.com/page",
+            initialPageTitle = "Page",
+        )
+        runCurrent()
+        assertEquals(SaveKind.NORMAL, vm.state.value.saveKind)
+
+        vm.selectSaveKind(SaveKind.PINNED)
+        assertEquals(SaveKind.PINNED, vm.state.value.saveKind)
+
+        vm.save()
+        runCurrent()
+
+        assertEquals(SaveKind.PINNED, repository.added.first().kind)
+        val next = ShareViewModel(
+            repository = repository,
+            initialUrl = "https://example.com/page",
+            initialPageTitle = "Page",
+        )
+        runCurrent()
+        assertEquals(SaveKind.NORMAL, next.state.value.saveKind)
+        advanceUntilIdle()
+    }
+
+    /** Without a proven normal-tabs capability the sheet must not offer or
+     * write normal records, even if the stored default says normal. */
+    @Test
+    fun capabilityDisabledForcesPinnedAndHidesTheChoice() = runTest(mainDispatcherRule.testDispatcher) {
+        val space = testSpace("s1")
+        val repository = FakeShareRepository(
+            signedIn = true,
+            cached = testSnapshot(space, ZenSpaces.NormalTabsCapability.DISABLED),
+            fresh = testSnapshot(space, ZenSpaces.NormalTabsCapability.DISABLED),
+            saveKind = SaveKind.NORMAL,
+        )
+        val vm = ShareViewModel(
+            repository = repository,
+            initialUrl = "https://example.com/page",
+            initialPageTitle = "Page",
+        )
+        runCurrent()
+
+        assertFalse(vm.state.value.allowsNormalTabs)
+        assertEquals(SaveKind.PINNED, vm.state.value.saveKind)
+
+        vm.selectSaveKind(SaveKind.NORMAL)
+        assertEquals(SaveKind.PINNED, vm.state.value.saveKind)
+
+        vm.save()
+        runCurrent()
+        assertEquals(SaveKind.PINNED, repository.added.first().kind)
+        advanceUntilIdle()
+    }
+
+    /** The common older-browser case: no readable prefs record at all still
+     * writes pinned, even when the stored default says normal. */
+    @Test
+    fun absentCapabilitySavesPinnedEvenWhenTheSavedDefaultIsNormal() =
+        runTest(mainDispatcherRule.testDispatcher) {
+            val space = testSpace("s1")
+            val repository = FakeShareRepository(
+                signedIn = true,
+                cached = testSnapshot(space, ZenSpaces.NormalTabsCapability.ABSENT),
+                fresh = testSnapshot(space, ZenSpaces.NormalTabsCapability.ABSENT),
+                saveKind = SaveKind.NORMAL,
+            )
+            val vm = ShareViewModel(
+                repository = repository,
+                initialUrl = "https://example.com/page",
+                initialPageTitle = "Page",
+            )
+            runCurrent()
+
+            assertFalse(vm.state.value.allowsNormalTabs)
+            assertEquals(SaveKind.PINNED, vm.state.value.saveKind)
+
+            vm.save()
+            runCurrent()
+            assertEquals(SaveKind.PINNED, repository.added.first().kind)
+            advanceUntilIdle()
+        }
+
+    /** A capability that arrives with the fresh snapshot applies the saved
+     * default, but never replaces a choice the user already made. */
+    @Test
+    fun freshCapabilityAppliesTheSavedDefaultUnlessTheUserChose() = runTest(mainDispatcherRule.testDispatcher) {
+        val space = testSpace("s1")
+        val repository = FakeShareRepository(
+            signedIn = true,
+            cached = testSnapshot(space, ZenSpaces.NormalTabsCapability.ABSENT),
+            fresh = testSnapshot(space, ZenSpaces.NormalTabsCapability.ABSENT),
+            saveKind = SaveKind.NORMAL,
+        )
+        val vm = ShareViewModel(
+            repository = repository,
+            initialUrl = "https://example.com/page",
+            initialPageTitle = "Page",
+        )
+        runCurrent()
+        assertFalse(vm.state.value.allowsNormalTabs)
+        assertEquals(SaveKind.PINNED, vm.state.value.saveKind)
+
+        repository.fresh = testSnapshot(space, ZenSpaces.NormalTabsCapability.ENABLED)
+        vm.refreshSpaces()
+        runCurrent()
+
+        assertTrue(vm.state.value.allowsNormalTabs)
+        assertEquals(SaveKind.NORMAL, vm.state.value.saveKind)
+
+        vm.selectSaveKind(SaveKind.PINNED)
+        vm.refreshSpaces()
+        runCurrent()
+
+        assertEquals(SaveKind.PINNED, vm.state.value.saveKind)
+        advanceUntilIdle()
+    }
+
+    /** A capability downgrade must not throw away a folder the user picked
+     * while normal tabs were still allowed. */
+    @Test
+    fun capabilityDowngradeKeepsThePickedFolder() = runTest(mainDispatcherRule.testDispatcher) {
+        val space = testSpace("s1", folderId = "folder-1")
+        val repository = FakeShareRepository(
+            signedIn = true,
+            cached = testSnapshot(space, ZenSpaces.NormalTabsCapability.ENABLED),
+            fresh = testSnapshot(space, ZenSpaces.NormalTabsCapability.ENABLED),
+        )
+        val vm = ShareViewModel(
+            repository = repository,
+            initialUrl = "https://example.com/page",
+            initialPageTitle = "Page",
+        )
+        runCurrent()
+
+        vm.selectDestination(PinDestination(spaceId = "s1", folderId = "folder-1"))
+        assertEquals("folder-1", vm.state.value.destination?.folderId)
+
+        repository.fresh = testSnapshot(space, ZenSpaces.NormalTabsCapability.DISABLED)
+        vm.refreshSpaces()
+        runCurrent()
+
+        assertFalse(vm.state.value.allowsNormalTabs)
+        assertEquals(SaveKind.PINNED, vm.state.value.saveKind)
+        assertEquals(
+            PinDestination(spaceId = "s1", folderId = "folder-1"),
+            vm.state.value.destination,
+        )
+        advanceUntilIdle()
+    }
+
+    @Test
     fun saveWithNoSpacesFailsWithoutRepositoryWrite() = runTest(mainDispatcherRule.testDispatcher) {
         val repository = FakeShareRepository(
             signedIn = true,
@@ -283,19 +485,40 @@ class ShareViewModelTests {
     }
 }
 
-private fun testSpace(id: String): ZenSpaces.ZenSpace = ZenSpaces.ZenSpace(
+private fun testSpace(id: String, folderId: String? = null): ZenSpaces.ZenSpace = ZenSpaces.ZenSpace(
     id = id,
     name = id,
     icon = null,
     containerGuid = null,
     theme = null,
-    pinned = emptyList(),
+    pinned = folderId?.let {
+        listOf(
+            ZenSpaces.ZenItem.Folder(
+                ZenSpaces.ZenFolder(
+                    id = it,
+                    name = it,
+                    icon = null,
+                    tabs = emptyList(),
+                ),
+            ),
+        )
+    } ?: emptyList(),
+)
+
+private fun testSnapshot(
+    space: ZenSpaces.ZenSpace,
+    capability: ZenSpaces.NormalTabsCapability,
+): ZenSpaces.ZenSnapshot = ZenSpaces.ZenSnapshot(
+    spaces = listOf(space),
+    essentials = emptyMap(),
+    fetchedAtMillis = 0L,
+    normalTabsCapability = capability,
 )
 
 private class FakeShareRepository(
     private val signedIn: Boolean,
     private val cached: ZenSpaces.ZenSnapshot?,
-    private val fresh: ZenSpaces.ZenSnapshot,
+    var fresh: ZenSpaces.ZenSnapshot,
     private val saveKind: SaveKind = SaveKind.PINNED,
     private val fallBackToPinned: Boolean = false,
     /** When set, [addTab] fails instead of saving. */

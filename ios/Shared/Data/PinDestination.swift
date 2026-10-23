@@ -221,6 +221,8 @@ struct PinDestinationMenuButton: UIViewRepresentable {
     /// Normal-tab saves always land at the space root, so the "Pin to Folder…"
     /// submenu is hidden when false.
     var allowsFolders: Bool = true
+    /// False while a save is in flight, so the target cannot change mid-write.
+    var isEnabled: Bool = true
     /// Overrides the button title/icon ink (e.g. when the host capsule is
     /// brand-tinted and the scheme-derived ink would not contrast).
     var inkColor: UIColor? = nil
@@ -255,14 +257,25 @@ struct PinDestinationMenuButton: UIViewRepresentable {
                 )
             }
         }
+        button.isEnabled = isEnabled
         button.setContentHuggingPriority(.required, for: .horizontal)
         button.setContentCompressionResistancePriority(.required, for: .horizontal)
         updateButton(button, context: context)
         return button
     }
 
+    /// Keeps the pill at its natural height (a bare representable would
+    /// stretch to the proposed height) while letting it give up width so the
+    /// row can never push the kind button off the sheet.
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UIButton, context: Context) -> CGSize? {
+        let intrinsic = uiView.intrinsicContentSize
+        let width = proposal.width.map { min(intrinsic.width, $0) } ?? intrinsic.width
+        return CGSize(width: width, height: intrinsic.height)
+    }
+
     func updateUIView(_ uiView: UIButton, context: Context) {
         context.coordinator.parent = self
+        uiView.isEnabled = isEnabled
         updateButton(uiView, context: context)
         // Refresh the menu only while it is NOT presented: rebuilding it
         // while open (e.g. on WebView progress re-renders) would close it.
@@ -274,6 +287,7 @@ struct PinDestinationMenuButton: UIViewRepresentable {
     private func updateButton(_ button: UIButton, context: Context) {
         var config = UIButton.Configuration.plain()
         config.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0)
+        config.titleLineBreakMode = .byTruncatingTail
 
         let fallbackInk = scheme == .dark ? UIColor.white : UIColor(red: 0.1, green: 0.1, blue: 0.12, alpha: 1.0)
         let ink = inkColor ?? fallbackInk
