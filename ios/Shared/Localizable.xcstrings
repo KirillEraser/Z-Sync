@@ -980,6 +980,16 @@
         }
       }
     },
+    "share.save_kind.hint" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Changes this share only"
+          }
+        }
+      }
+    },
     "share.save_kind.normal" : {
       "localizations" : {
         "en" : {
@@ -990,32 +1000,12 @@
         }
       }
     },
-    "share.save_kind.normal_menu" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Normal Tab"
-          }
-        }
-      }
-    },
     "share.save_kind.pinned" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Pin"
-          }
-        }
-      }
-    },
-    "share.save_kind.pinned_menu" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pin Tab"
           }
         }
       }

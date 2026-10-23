@@ -132,40 +132,37 @@ struct ShareSheetView: View {
                     .padding(.top, 6)
             }
 
-            PinDestinationMenuButton(
-                destination: model.destination,
-                spaces: model.spaces,
-                scheme: effectiveScheme,
-                titleSize: 17,
-                allowsFolders: model.saveKind == .pinned,
-                onSelect: { chosen in
-                    model.selectDestination(chosen)
+            HStack(spacing: 10) {
+                PinDestinationMenuButton(
+                    destination: model.destination,
+                    spaces: model.spaces,
+                    scheme: effectiveScheme,
+                    titleSize: 17,
+                    allowsFolders: model.saveKind == .pinned,
+                    onSelect: { chosen in
+                        model.selectDestination(chosen)
+                    }
+                )
+                .fixedSize()
+                .padding(.horizontal, 18)
+                .padding(.vertical, 11)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(Palette.lift(effectiveScheme))
+                )
+                .glassRimCapsule()
+                .accessibilityLabel(Text("share.workspace"))
+
+                if model.allowsNormalTabs {
+                    saveKindToggle
                 }
-            )
-            .fixedSize()
-            .padding(.horizontal, 18)
-            .padding(.vertical, 11)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(Palette.lift(effectiveScheme))
-            )
-            .glassRimCapsule()
+            }
             .padding(.top, 28)
             .padding(.horizontal, 24)
-            .accessibilityLabel(Text("share.workspace"))
             // The write is already in flight; changing the target or the kind
             // now could only contradict what is being written.
             .opacity(model.phase == .saving ? 0.55 : 1)
             .allowsHitTesting(model.phase != .saving)
-
-            if model.allowsNormalTabs {
-                saveKindMenu
-                    .disabled(model.phase == .saving)
-                    .opacity(model.phase == .saving ? 0.55 : 1)
-                    .allowsHitTesting(model.phase != .saving)
-                    .padding(.top, 16)
-                    .padding(.horizontal, 24)
-            }
 
             Spacer()
 
@@ -205,50 +202,28 @@ struct ShareSheetView: View {
         }
     }
 
-    /// Compact per-share override, styled like the space picker but smaller.
-    /// Only shown when the synced browser can write normal tabs; leaving it
-    /// untouched keeps the persisted setting.
-    private var saveKindMenu: some View {
-        Menu {
-            ForEach(SaveKind.allCases) { kind in
-                let title = kind == .pinned
-                    ? String(localized: "share.save_kind.pinned_menu")
-                    : String(localized: "share.save_kind.normal_menu")
-                Button {
-                    model.selectSaveKind(kind)
-                } label: {
-                    if model.saveKind == kind {
-                        Label(title, systemImage: "checkmark")
-                    } else {
-                        Text(title)
-                    }
-                }
-            }
+    /// Per-share pin/normal switch, a round companion to the destination pill
+    /// instead of a second capsule. Only shown when the synced browser can
+    /// write normal tabs; leaving it untouched keeps the persisted setting.
+    private var saveKindToggle: some View {
+        Button {
+            model.selectSaveKind(model.saveKind == .pinned ? .normal : .pinned)
         } label: {
-            HStack(spacing: 7) {
-                Image(systemName: model.saveKind == .pinned ? "pin.fill" : "rectangle.stack")
-                    .font(.system(size: 11.5, weight: .semibold))
-                Text(LocalizedStringKey(model.saveKind == .pinned ? "share.save_kind.pinned" : "share.save_kind.normal"))
-                    .font(.system(size: 14, weight: .semibold, design: .rounded))
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 8, weight: .bold))
-                    .opacity(0.45)
-            }
-            .foregroundStyle(Palette.ink(effectiveScheme))
-            .padding(.horizontal, 13)
-            .padding(.vertical, 6)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(Palette.lift(effectiveScheme))
-            )
-            .glassRimCapsule()
-            // Transparent margin keeps the visual pill compact while the
-            // tappable area reaches the 44 pt HIG minimum.
-            .padding(.vertical, 8)
-            .contentShape(Rectangle())
+            Image(systemName: model.saveKind == .pinned ? "pin.fill" : "rectangle.stack")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Palette.ink(effectiveScheme))
+                .frame(width: 44, height: 44)
+                .background(
+                    Circle().fill(Palette.lift(effectiveScheme))
+                )
+                .glassRimCapsule()
+                .contentShape(Circle())
         }
+        .buttonStyle(PressedButtonStyle())
         .accessibilityLabel(Text("share.save_as"))
         .accessibilityValue(Text(LocalizedStringKey(model.saveKind == .pinned ? "share.save_kind.pinned" : "share.save_kind.normal")))
+        .accessibilityHint(Text("share.save_kind.hint"))
+        .disabled(model.phase == .saving)
     }
 
     private func status(title: String, detail: String, systemImage: String? = nil, action: String?, run: @escaping () -> Void) -> some View {
