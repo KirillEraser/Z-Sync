@@ -9,7 +9,6 @@ enum class WhatsNewIcon {
     SHARE,
     TAB_MENU,
     SEARCH,
-    FOLDER,
     GRID,
     FIXES,
 }
@@ -51,12 +50,6 @@ object WhatsNewRelease {
             icon = WhatsNewIcon.SEARCH,
         ),
         WhatsNewItem(
-            id = "folder-icons",
-            titleRes = R.string.whats_new_item_folder_icons_title,
-            detailRes = R.string.whats_new_item_folder_icons_detail,
-            icon = WhatsNewIcon.FOLDER,
-        ),
-        WhatsNewItem(
             id = "essentials-per-row",
             titleRes = R.string.whats_new_item_essentials_title,
             detailRes = R.string.whats_new_item_essentials_detail,
@@ -69,18 +62,6 @@ object WhatsNewRelease {
             icon = WhatsNewIcon.FIXES,
         ),
     )
-
-    /**
-     * Balanced split into at most two pages, so the sheet reads as a short
-     * two-step update instead of one long scroll. With the current seven
-     * items that is 4 + 3.
-     */
-    val pages: List<List<WhatsNewItem>> = if (items.size <= 1) {
-        listOf(items)
-    } else {
-        val midpoint = (items.size + 1) / 2
-        listOf(items.take(midpoint), items.drop(midpoint))
-    }
 }
 
 /** Storage seam for the app version whose notes were already shown. */

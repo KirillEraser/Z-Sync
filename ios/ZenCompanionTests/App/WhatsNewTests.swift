@@ -80,26 +80,12 @@ final class WhatsNewTests: XCTestCase {
         XCTAssertTrue(ids.contains("tab-controls"))
     }
 
-    func testReleaseSplitsIntoTwoPagesWithoutLosingItems() {
-        let release = WhatsNewRelease.latest
-        let pages = release.pages
+    func testFolderIconsLiveInTheFixesItem() {
+        let fixes = WhatsNewRelease.latest.items.first { $0.id == "more-fixes" }
 
-        XCTAssertEqual(pages.count, 2)
-        XCTAssertEqual(pages.flatMap { $0 }, release.items)
-        XCTAssertFalse(pages[0].isEmpty)
-        XCTAssertFalse(pages[1].isEmpty)
-        XCTAssertLessThanOrEqual(abs(pages[0].count - pages[1].count), 1)
-    }
-
-    func testEmptyOrSingleItemReleaseStaysOnOnePage() {
-        XCTAssertEqual(WhatsNewRelease(items: []).pages.count, 1)
-        let only = WhatsNewItem(
-            id: "only",
-            systemImage: "sparkles",
-            title: "Only",
-            detail: "Single item"
-        )
-        XCTAssertEqual(WhatsNewRelease(items: [only]).pages, [[only]])
+        XCTAssertNotNil(fixes)
+        XCTAssertTrue(fixes?.detail.localizedCaseInsensitiveContains("folder icons") == true)
+        XCTAssertFalse(WhatsNewRelease.latest.items.contains { $0.id == "folder-icons" })
     }
 
     func testCopyStaysConcise() {

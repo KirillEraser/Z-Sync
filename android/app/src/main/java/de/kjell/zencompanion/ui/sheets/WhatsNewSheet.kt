@@ -1,6 +1,5 @@
 package de.kjell.zencompanion.ui.sheets
 
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,17 +13,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Build
 import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Search
@@ -37,13 +31,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -52,23 +43,15 @@ import de.kjell.zencompanion.R
 import de.kjell.zencompanion.data.WhatsNewIcon
 import de.kjell.zencompanion.data.WhatsNewItem
 import de.kjell.zencompanion.data.WhatsNewRelease
-import kotlinx.coroutines.launch
 
 /**
- * Material 3 What's New sheet: a two-page horizontal pager of release
- * highlights with a pinned bottom button. The button advances to the second
- * page and becomes Done on the last page. All type comes from
- * [MaterialTheme.typography] so font scaling is respected; each page scrolls
- * instead of clipping at large sizes.
+ * Material 3 What's New sheet: a single scrollable list of release highlights
+ * with a pinned Done button. All type comes from [MaterialTheme.typography]
+ * so font scaling is respected; the list scrolls instead of clipping.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WhatsNewSheet(onDismiss: () -> Unit) {
-    val pages = WhatsNewRelease.pages
-    val pagerState = rememberPagerState(pageCount = { pages.size })
-    val scope = rememberCoroutineScope()
-    val isLastPage = pagerState.currentPage == pages.lastIndex
-
     ZenSheet(
         onDismiss = onDismiss,
         skipPartiallyExpanded = true,
@@ -86,29 +69,52 @@ fun WhatsNewSheet(onDismiss: () -> Unit) {
         },
     ) {
         Column(Modifier.fillMaxSize()) {
-            HorizontalPager(
-                state = pagerState,
-                modifier = Modifier.weight(1f),
-            ) { index ->
-                WhatsNewPage(
-                    index = index,
-                    items = pages[index],
-                    onClose = onDismiss,
+            Column(
+                Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 24.dp),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    CloseButton(onDismiss)
+                }
+
+                Spacer(Modifier.height(4.dp))
+
+                Text(
+                    text = stringResource(R.string.whats_new_title),
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.semantics { heading() },
                 )
+
+                Spacer(Modifier.height(8.dp))
+
+                Text(
+                    text = stringResource(R.string.whats_new_subtitle),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                Spacer(Modifier.height(28.dp))
+
+                Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
+                    WhatsNewRelease.items.forEach { item ->
+                        WhatsNewRow(item)
+                    }
+                }
+
+                Spacer(Modifier.height(24.dp))
             }
 
-            PageDots(current = pagerState.currentPage, count = pages.size)
-
             Button(
-                onClick = {
-                    if (isLastPage) {
-                        onDismiss()
-                    } else {
-                        scope.launch {
-                            pagerState.animateScrollToPage(pagerState.currentPage + 1)
-                        }
-                    }
-                },
+                onClick = onDismiss,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 24.dp)
@@ -118,86 +124,12 @@ fun WhatsNewSheet(onDismiss: () -> Unit) {
                 contentPadding = PaddingValues(horizontal = 24.dp, vertical = 14.dp),
             ) {
                 Text(
-                    text = stringResource(
-                        if (isLastPage) R.string.whats_new_done else R.string.whats_new_continue,
-                    ),
+                    text = stringResource(R.string.whats_new_done),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun WhatsNewPage(
-    index: Int,
-    items: List<WhatsNewItem>,
-    onClose: () -> Unit,
-) {
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp),
-    ) {
-        if (index == 0) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp),
-                horizontalArrangement = Arrangement.End,
-            ) {
-                CloseButton(onClose)
-            }
-
-            Spacer(Modifier.height(4.dp))
-
-            Text(
-                text = stringResource(R.string.whats_new_title),
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.semantics { heading() },
-            )
-
-            Spacer(Modifier.height(8.dp))
-
-            Text(
-                text = stringResource(R.string.whats_new_subtitle),
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        } else {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp),
-                horizontalArrangement = Arrangement.End,
-            ) {
-                CloseButton(onClose)
-            }
-
-            Spacer(Modifier.height(4.dp))
-
-            Text(
-                text = stringResource(R.string.whats_new_page2_title),
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.semantics { heading() },
-            )
-        }
-
-        Spacer(Modifier.height(28.dp))
-
-        Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
-            items.forEach { item ->
-                WhatsNewRow(item)
-            }
-        }
-
-        Spacer(Modifier.height(24.dp))
     }
 }
 
@@ -209,42 +141,6 @@ private fun CloseButton(onClose: () -> Unit) {
             contentDescription = stringResource(R.string.common_close),
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-    }
-}
-
-@Composable
-private fun PageDots(current: Int, count: Int) {
-    if (count <= 1) return
-
-    val label = stringResource(R.string.whats_new_page_indicator, current + 1, count)
-    val activeColor = MaterialTheme.colorScheme.primary
-    val inactiveColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f)
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 8.dp)
-            .semantics { contentDescription = label },
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        repeat(count) { index ->
-            val selected = index == current
-            val width by animateDpAsState(
-                targetValue = if (selected) 22.dp else 8.dp,
-                label = "whatsNewDotWidth",
-            )
-            Box(
-                Modifier
-                    .padding(horizontal = 4.dp)
-                    .width(width)
-                    .height(8.dp)
-                    .background(
-                        color = if (selected) activeColor else inactiveColor,
-                        shape = CircleShape,
-                    ),
-            )
-        }
     }
 }
 
@@ -293,7 +189,6 @@ private val WhatsNewIcon.imageVector: ImageVector
         WhatsNewIcon.SHARE -> Icons.Outlined.Share
         WhatsNewIcon.TAB_MENU -> Icons.Outlined.MoreVert
         WhatsNewIcon.SEARCH -> Icons.Outlined.Search
-        WhatsNewIcon.FOLDER -> Icons.Outlined.Folder
         WhatsNewIcon.GRID -> Icons.Outlined.GridView
         WhatsNewIcon.FIXES -> Icons.Outlined.Build
     }

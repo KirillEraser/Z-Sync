@@ -37,12 +37,6 @@ struct WhatsNewRelease: Equatable {
             detail: "Turn on Open into search to open a fresh search tab whenever you come back to the app."
         ),
         WhatsNewItem(
-            id: "folder-icons",
-            systemImage: "folder",
-            title: "See folder icons",
-            detail: "Synced folder icons now show inside the folder flap, like on the desktop."
-        ),
-        WhatsNewItem(
             id: "essentials-per-row",
             systemImage: "square.grid.2x2",
             title: "Set essentials per row",
@@ -52,18 +46,9 @@ struct WhatsNewRelease: Equatable {
             id: "more-fixes",
             systemImage: "wrench.and.screwdriver",
             title: "Plus many more fixes",
-            detail: "Smaller bug fixes and polish across the browser, sharing, and sync."
+            detail: "Folder icons now show in the folder flap, along with smaller fixes and polish across the browser, sharing, and sync."
         )
     ])
-
-    /// Balanced split into at most two pages, so the sheet reads as a short
-    /// two-step update instead of one long scroll. With the current seven
-    /// items that is 4 + 3.
-    var pages: [[WhatsNewItem]] {
-        guard items.count > 1 else { return [items] }
-        let midpoint = (items.count + 1) / 2
-        return [Array(items.prefix(midpoint)), Array(items.dropFirst(midpoint))]
-    }
 }
 
 /// Remembers the app version whose notes were already shown. The current app
