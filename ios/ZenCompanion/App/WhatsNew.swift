@@ -22,31 +22,25 @@ struct WhatsNewRelease: Equatable {
             id: "share-save-kind",
             systemImage: "square.and.arrow.up",
             title: "Choose pin or normal when sharing",
-            detail: "A new Save as menu in the share sheet saves each link as a pinned or normal tab, without changing your default."
+            detail: "Pick pin or normal per share, without changing your default."
         ),
         WhatsNewItem(
             id: "tab-controls",
-            systemImage: "contextualmenu.and.cursorarrow",
+            systemImage: "rectangle.on.rectangle",
             title: "More control over tabs",
-            detail: "Move pinned tabs into folders from the tab menu, or pin a normal tab without opening it."
+            detail: "Move pinned tabs into folders or pin normal tabs from the menu."
         ),
         WhatsNewItem(
             id: "open-into-search",
             systemImage: "magnifyingglass",
             title: "Open straight into search",
-            detail: "Turn on Open into search to open a fresh search tab whenever you come back to the app."
+            detail: "Open a fresh search tab whenever you come back to the app."
         ),
         WhatsNewItem(
-            id: "essentials-per-row",
-            systemImage: "square.grid.2x2",
-            title: "Set essentials per row",
-            detail: "Pick how many essentials fit on a row under Advanced."
-        ),
-        WhatsNewItem(
-            id: "more-fixes",
-            systemImage: "wrench.and.screwdriver",
-            title: "Plus many more fixes",
-            detail: "Folder icons now show in the folder flap, along with smaller fixes and polish across the browser, sharing, and sync."
+            id: "more",
+            systemImage: "sparkles",
+            title: "Plus a few more things",
+            detail: "Folder icons, an essentials-per-row option, and many smaller fixes."
         )
     ])
 }

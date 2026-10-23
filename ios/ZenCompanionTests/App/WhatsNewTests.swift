@@ -80,18 +80,21 @@ final class WhatsNewTests: XCTestCase {
         XCTAssertTrue(ids.contains("tab-controls"))
     }
 
-    func testFolderIconsLiveInTheFixesItem() {
-        let fixes = WhatsNewRelease.latest.items.first { $0.id == "more-fixes" }
+    func testFolderIconsAndEssentialsLiveInTheMoreItem() {
+        let more = WhatsNewRelease.latest.items.first { $0.id == "more" }
 
-        XCTAssertNotNil(fixes)
-        XCTAssertTrue(fixes?.detail.localizedCaseInsensitiveContains("folder icons") == true)
+        XCTAssertNotNil(more)
+        XCTAssertTrue(more?.detail.localizedCaseInsensitiveContains("folder icons") == true)
+        XCTAssertTrue(more?.detail.localizedCaseInsensitiveContains("essentials") == true)
         XCTAssertFalse(WhatsNewRelease.latest.items.contains { $0.id == "folder-icons" })
+        XCTAssertFalse(WhatsNewRelease.latest.items.contains { $0.id == "essentials-per-row" })
     }
 
     func testCopyStaysConcise() {
         for item in WhatsNewRelease.latest.items {
             XCTAssertLessThanOrEqual(item.title.count, 48, "\(item.id) title is too long")
-            XCTAssertLessThanOrEqual(item.detail.count, 160, "\(item.id) detail is too long")
+            // Two lines at the default text size; Dynamic Type may wrap more.
+            XCTAssertLessThanOrEqual(item.detail.count, 74, "\(item.id) detail is too long")
         }
     }
 

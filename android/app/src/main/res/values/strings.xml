@@ -187,13 +187,11 @@
     <string name="whats_new_subtitle">Here\'s what changed in this update.</string>
     <string name="whats_new_done">Done</string>
     <string name="whats_new_item_share_title">Choose pin or normal when sharing</string>
-    <string name="whats_new_item_share_detail">A new Save as menu in the share sheet saves each link as a pinned or normal tab, without changing your default.</string>
-    <string name="whats_new_item_essentials_title">Set essentials per row</string>
-    <string name="whats_new_item_essentials_detail">Pick how many essentials fit on a row under Advanced.</string>
+    <string name="whats_new_item_share_detail">Pick pin or normal per share, without changing your default.</string>
     <string name="whats_new_item_search_title">Open straight into search</string>
-    <string name="whats_new_item_search_detail">Turn on Open into search to open a fresh search tab whenever you come back to the app.</string>
+    <string name="whats_new_item_search_detail">Open a fresh search tab whenever you come back to the app.</string>
     <string name="whats_new_item_tab_controls_title">More control over tabs</string>
-    <string name="whats_new_item_tab_controls_detail">Move pinned tabs into folders from the tab menu, or pin a normal tab without opening it.</string>
-    <string name="whats_new_item_more_fixes_title">Plus many more fixes</string>
-    <string name="whats_new_item_more_fixes_detail">Folder icons now show in the folder flap, along with smaller fixes and polish across the browser, sharing, and sync.</string>
+    <string name="whats_new_item_tab_controls_detail">Move pinned tabs into folders or pin normal tabs from the menu.</string>
+    <string name="whats_new_item_more_title">Plus a few more things</string>
+    <string name="whats_new_item_more_detail">Folder icons, an essentials-per-row option, and many smaller fixes.</string>
 </resources>

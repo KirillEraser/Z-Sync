@@ -7,10 +7,9 @@ import de.kjell.zencompanion.R
 /** Badge artwork for one release note. Mapped to a Material icon in the UI. */
 enum class WhatsNewIcon {
     SHARE,
-    TAB_MENU,
+    TABS,
     SEARCH,
-    GRID,
-    FIXES,
+    MORE,
 }
 
 /**
@@ -41,7 +40,7 @@ object WhatsNewRelease {
             id = "tab-controls",
             titleRes = R.string.whats_new_item_tab_controls_title,
             detailRes = R.string.whats_new_item_tab_controls_detail,
-            icon = WhatsNewIcon.TAB_MENU,
+            icon = WhatsNewIcon.TABS,
         ),
         WhatsNewItem(
             id = "open-into-search",
@@ -50,16 +49,10 @@ object WhatsNewRelease {
             icon = WhatsNewIcon.SEARCH,
         ),
         WhatsNewItem(
-            id = "essentials-per-row",
-            titleRes = R.string.whats_new_item_essentials_title,
-            detailRes = R.string.whats_new_item_essentials_detail,
-            icon = WhatsNewIcon.GRID,
-        ),
-        WhatsNewItem(
-            id = "more-fixes",
-            titleRes = R.string.whats_new_item_more_fixes_title,
-            detailRes = R.string.whats_new_item_more_fixes_detail,
-            icon = WhatsNewIcon.FIXES,
+            id = "more",
+            titleRes = R.string.whats_new_item_more_title,
+            detailRes = R.string.whats_new_item_more_detail,
+            icon = WhatsNewIcon.MORE,
         ),
     )
 }
