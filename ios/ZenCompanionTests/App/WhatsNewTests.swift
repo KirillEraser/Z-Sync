@@ -7,15 +7,19 @@ import XCTest
 final class WhatsNewTests: XCTestCase {
     private func makeStore(
         _ preferences: FakePreferences = FakePreferences(),
-        version: String = "1.4.1",
+        version: String = "1.5",
         release: WhatsNewRelease = .latest
     ) -> WhatsNewStore {
         WhatsNewStore(preferences: preferences, currentVersion: version, release: release)
     }
 
-    // MARK: - Once per version
+    // MARK: - Once per release
 
-    func testPresentsOnceForTheCurrentVersion() {
+    func testReleaseTargetsVersion15() {
+        XCTAssertEqual(WhatsNewRelease.latest.version, "1.5")
+    }
+
+    func testPresentsOnceForTheReleaseVersion() {
         let preferences = FakePreferences()
         let store = makeStore(preferences)
 
@@ -27,12 +31,21 @@ final class WhatsNewTests: XCTestCase {
         XCTAssertFalse(makeStore(preferences).shouldPresent)
     }
 
-    func testPresentsAgainForANewVersion() {
-        let preferences = FakePreferences()
-        makeStore(preferences, version: "1.4.1").markPresented()
+    func testDoesNotPresentBeforeTheReleaseVersion() {
+        XCTAssertFalse(makeStore(FakePreferences(), version: "1.4.1").shouldPresent)
+        XCTAssertFalse(makeStore(FakePreferences(), version: "1.5.1").shouldPresent)
+        XCTAssertTrue(makeStore(FakePreferences(), version: "1.5").shouldPresent)
+    }
 
-        XCTAssertFalse(makeStore(preferences, version: "1.4.1").shouldPresent)
-        XCTAssertTrue(makeStore(preferences, version: "1.5").shouldPresent)
+    func testPresentsAgainForANewerRelease() {
+        let preferences = FakePreferences()
+        makeStore(preferences, version: "1.5").markPresented()
+
+        XCTAssertFalse(makeStore(preferences, version: "1.5").shouldPresent)
+        XCTAssertFalse(makeStore(preferences, version: "1.6").shouldPresent)
+
+        let nextRelease = WhatsNewRelease(version: "1.6", items: WhatsNewRelease.latest.items)
+        XCTAssertTrue(makeStore(preferences, version: "1.6", release: nextRelease).shouldPresent)
     }
 
     func testMarkingTwiceKeepsTheSameVersion() {
@@ -44,16 +57,8 @@ final class WhatsNewTests: XCTestCase {
 
         XCTAssertEqual(
             preferences.string(PreferenceKeys.whatsNewShownVersion, scope: .standard),
-            "1.4.1"
+            "1.5"
         )
-    }
-
-    func testVersionComparisonIsExact() {
-        let preferences = FakePreferences()
-        makeStore(preferences, version: "1.4.1").markPresented()
-
-        XCTAssertTrue(makeStore(preferences, version: "1.4.1.1").shouldPresent)
-        XCTAssertTrue(makeStore(preferences, version: "1.4").shouldPresent)
     }
 
     // MARK: - Release notes model

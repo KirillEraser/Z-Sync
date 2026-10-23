@@ -306,6 +306,7 @@ class AppViewModel(
         FxAClient(transport = AccountStore.authTransport).destroySession(token)
     },
     private val whatsNewRepository: WhatsNewRepository = AndroidWhatsNewRepository(appContext),
+    private val appVersion: String = BuildConfig.VERSION_NAME,
 ) : ViewModel() {
     // Loaded synchronously at creation so the first composed frame already
     // shows the right screen — no sign-in flash on cold start.
@@ -323,7 +324,7 @@ class AppViewModel(
     private val _activity = MutableStateFlow(ActivityState())
     val activity: StateFlow<ActivityState> = _activity
 
-    private val whatsNew = WhatsNewController(whatsNewRepository, BuildConfig.VERSION_NAME)
+    private val whatsNew = WhatsNewController(whatsNewRepository, appVersion)
     private val _whatsNewVisible = MutableStateFlow(false)
     val whatsNewVisible: StateFlow<Boolean> = _whatsNewVisible
 

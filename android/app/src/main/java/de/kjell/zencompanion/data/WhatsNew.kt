@@ -25,10 +25,12 @@ data class WhatsNewItem(
 
 /**
  * The notes the What's New sheet shows. Keep this to genuinely user-visible
- * changes, in reading order. The Android list is not identical to iOS where a
- * change is platform-specific (rotation here, iPad full screen there).
+ * changes, in reading order. The version is the store release these notes
+ * belong to, not the build currently running.
  */
 object WhatsNewRelease {
+    const val version: String = "1.5"
+
     val items: List<WhatsNewItem> = listOf(
         WhatsNewItem(
             id = "share-save-kind",
@@ -57,28 +59,32 @@ object WhatsNewRelease {
     )
 }
 
-/** Storage seam for the app version whose notes were already shown. */
+/** Storage seam for the release version whose notes were already shown. */
 interface WhatsNewRepository {
     fun shownVersion(): String?
     fun setShownVersion(version: String)
 }
 
 /**
- * Once-per-version decision, kept free of Android types so it is testable on
- * the JVM. The current version is the key: the next store release presents the
- * sheet again without any extra bookkeeping. A fresh install also presents it,
- * which is safer than guessing whether the app was updated.
+ * Once-per-release decision, kept free of Android types so it is testable on
+ * the JVM. The notes only appear once the running app reaches their release
+ * version, and then only until they have been shown for it. A fresh 1.5
+ * install also presents them, which is safer than guessing whether the app
+ * was updated.
  */
 class WhatsNewController(
     private val repository: WhatsNewRepository,
     private val currentVersion: String,
+    private val releaseVersion: String = WhatsNewRelease.version,
 ) {
     fun shouldPresent(isDemo: Boolean): Boolean =
-        !isDemo && repository.shownVersion() != currentVersion
+        !isDemo &&
+            currentVersion == releaseVersion &&
+            repository.shownVersion() != releaseVersion
 
     /** Call when the sheet is presented, not when it is dismissed. */
     fun markPresented() {
-        repository.setShownVersion(currentVersion)
+        repository.setShownVersion(releaseVersion)
     }
 }
 

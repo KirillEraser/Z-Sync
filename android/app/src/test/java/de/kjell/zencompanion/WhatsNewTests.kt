@@ -20,31 +20,47 @@ class WhatsNewTests {
     }
 
     @Test
-    fun presentsOnceForTheCurrentVersion() {
+    fun releaseTargetsVersion15() {
+        assertEquals("1.5", WhatsNewRelease.version)
+    }
+
+    @Test
+    fun presentsOnceForTheReleaseVersion() {
         val repository = MemoryWhatsNewRepository()
-        val controller = WhatsNewController(repository, "1.4.1")
+        val controller = WhatsNewController(repository, "1.5")
 
         assertTrue(controller.shouldPresent(isDemo = false))
 
         controller.markPresented()
 
         assertFalse(controller.shouldPresent(isDemo = false))
-        assertFalse(WhatsNewController(repository, "1.4.1").shouldPresent(isDemo = false))
+        assertFalse(WhatsNewController(repository, "1.5").shouldPresent(isDemo = false))
     }
 
     @Test
-    fun presentsAgainForANewVersion() {
-        val repository = MemoryWhatsNewRepository()
-        WhatsNewController(repository, "1.4.1").markPresented()
+    fun doesNotPresentBeforeTheReleaseVersion() {
+        assertFalse(WhatsNewController(MemoryWhatsNewRepository(), "1.4.1").shouldPresent(isDemo = false))
+        assertFalse(WhatsNewController(MemoryWhatsNewRepository(), "1.5.1").shouldPresent(isDemo = false))
+        assertTrue(WhatsNewController(MemoryWhatsNewRepository(), "1.5").shouldPresent(isDemo = false))
+    }
 
-        assertFalse(WhatsNewController(repository, "1.4.1").shouldPresent(isDemo = false))
-        assertTrue(WhatsNewController(repository, "1.5").shouldPresent(isDemo = false))
+    @Test
+    fun presentsAgainForANewerRelease() {
+        val repository = MemoryWhatsNewRepository()
+        WhatsNewController(repository, "1.5").markPresented()
+
+        assertFalse(WhatsNewController(repository, "1.5").shouldPresent(isDemo = false))
+        assertFalse(WhatsNewController(repository, "1.6").shouldPresent(isDemo = false))
+        assertTrue(
+            WhatsNewController(repository, "1.6", releaseVersion = "1.6")
+                .shouldPresent(isDemo = false),
+        )
     }
 
     @Test
     fun neverMarksTheSheetInDemoMode() {
         val repository = MemoryWhatsNewRepository()
-        val controller = WhatsNewController(repository, "1.4.1")
+        val controller = WhatsNewController(repository, "1.5")
 
         assertFalse(controller.shouldPresent(isDemo = true))
         assertNull(repository.version)
@@ -53,21 +69,12 @@ class WhatsNewTests {
     @Test
     fun markingTwiceKeepsTheSameVersion() {
         val repository = MemoryWhatsNewRepository()
-        val controller = WhatsNewController(repository, "1.4.1")
+        val controller = WhatsNewController(repository, "1.5")
 
         controller.markPresented()
         controller.markPresented()
 
-        assertEquals("1.4.1", repository.version)
-    }
-
-    @Test
-    fun versionComparisonIsExact() {
-        val repository = MemoryWhatsNewRepository()
-        WhatsNewController(repository, "1.4.1").markPresented()
-
-        assertTrue(WhatsNewController(repository, "1.4.1.1").shouldPresent(isDemo = false))
-        assertTrue(WhatsNewController(repository, "1.4").shouldPresent(isDemo = false))
+        assertEquals("1.5", repository.version)
     }
 
     @Test

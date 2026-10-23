@@ -13,11 +13,13 @@ struct WhatsNewItem: Identifiable, Hashable {
 }
 
 /// The notes shown by the What's New sheet. Keep this to genuinely
-/// user-visible changes, in the order they should be read.
+/// user-visible changes, in the order they should be read. The version is the
+/// store release these notes belong to, not the build currently running.
 struct WhatsNewRelease: Equatable {
+    let version: String
     let items: [WhatsNewItem]
 
-    static let latest = WhatsNewRelease(items: [
+    static let latest = WhatsNewRelease(version: "1.5", items: [
         WhatsNewItem(
             id: "share-save-kind",
             systemImage: "square.and.arrow.up",
@@ -45,9 +47,9 @@ struct WhatsNewRelease: Equatable {
     ])
 }
 
-/// Remembers the app version whose notes were already shown. The current app
-/// version is the key, so a new store release presents the sheet once more
-/// without any extra bookkeeping.
+/// Remembers the release whose notes were already shown. The release version
+/// is the key, so the notes appear once when the app reaches 1.5 and are not
+/// repeated on later launches.
 @MainActor
 struct WhatsNewStore {
     private let preferences: PreferencesStoring
@@ -68,16 +70,18 @@ struct WhatsNewStore {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0"
     }
 
-    /// True until the notes have been shown for this app version. A fresh
-    /// install also returns true, so the first signed-in launch introduces the
+    /// True only once the running app has reached the release these notes
+    /// describe, and until they have been shown for it. A fresh 1.5 install
+    /// also returns true, so the first signed-in launch introduces the
     /// release; that is safer than guessing whether the app was updated.
     var shouldPresent: Bool {
-        preferences.string(PreferenceKeys.whatsNewShownVersion, scope: .standard) != currentVersion
+        currentVersion == release.version
+            && preferences.string(PreferenceKeys.whatsNewShownVersion, scope: .standard) != release.version
     }
 
     /// Call when the sheet is presented, not when it is dismissed: if the app
     /// is killed while the sheet is up, it must not reappear on every launch.
     func markPresented() {
-        preferences.setString(currentVersion, PreferenceKeys.whatsNewShownVersion, scope: .standard)
+        preferences.setString(release.version, PreferenceKeys.whatsNewShownVersion, scope: .standard)
     }
 }
