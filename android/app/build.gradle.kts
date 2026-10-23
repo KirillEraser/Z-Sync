@@ -12,6 +12,10 @@ val keystoreProps = Properties().apply {
     if (f.exists()) FileInputStream(f).use { load(it) }
 }
 
+// See keystore.properties.example. Absent on a fresh clone and in CI, which is
+// fine: only release builds need it, and they refuse to run without it below.
+val hasReleaseSigning = keystoreProps["storeFile"] != null
+
 android {
     namespace = "de.kjell.zencompanion"
     compileSdk = 37
@@ -20,13 +24,13 @@ android {
         applicationId = "de.kjell.zencompanion"
         minSdk = 26
         targetSdk = 36
-        versionCode = 8
-        versionName = "1.4.1"
+        versionCode = 9
+        versionName = "1.5"
         vectorDrawables { useSupportLibrary = true }
     }
 
     signingConfigs {
-        if (keystoreProps["storeFile"] != null) {
+        if (hasReleaseSigning) {
             create("release") {
                 storeFile = rootProject.file(keystoreProps["storeFile"] as String)
                 storePassword = keystoreProps["storePassword"] as String
@@ -44,7 +48,7 @@ android {
             optimization {
                 enable = true
             }
-            if (keystoreProps["storeFile"] != null) {
+            if (hasReleaseSigning) {
                 signingConfig = signingConfigs.getByName("release")
             }
         }
@@ -79,6 +83,31 @@ android {
 kotlin {
     compilerOptions {
         jvmTarget = JvmTarget.JVM_17
+    }
+}
+
+// Without a signing config, assembleRelease and bundleRelease still "succeed"
+// and quietly write an unsigned APK/AAB that no device and no Play upload will
+// accept. Fail before anything is compiled, so those artifacts can never be
+// produced by accident. This also fails a plain "gradle build", which pulls in
+// assembleRelease. Escape hatch: ZSYNC_ALLOW_UNSIGNED=1
+val allowUnsignedRelease =
+    providers.environmentVariable("ZSYNC_ALLOW_UNSIGNED").orNull == "1"
+
+gradle.taskGraph.whenReady {
+    val unsignedRelease = allTasks.filter {
+        it.name == "assembleRelease" || it.name == "bundleRelease"
+    }
+    if (unsignedRelease.isNotEmpty() && !hasReleaseSigning && !allowUnsignedRelease) {
+        throw GradleException(
+            """
+            Release signing is not configured, so ${unsignedRelease.joinToString { it.name }} would
+            write an unsigned artifact that nothing will install.
+            Copy android/keystore.properties.example to android/keystore.properties and point
+            storeFile at the release keystore, or add ZSYNC_ALLOW_UNSIGNED=1 to build an
+            unsigned artifact on purpose.
+            """.trimIndent()
+        )
     }
 }
 

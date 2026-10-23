@@ -35,6 +35,27 @@ minSdk 26 · targetSdk 36 · compileSdk 37 · portrait-only.
 Toolchain: Gradle 9.7.1 · AGP 9.4.1 · built-in Kotlin (Compose compiler plugin
 2.2.10) · Compose BOM 2026.09.00.
 
+## Release
+
+The signed APK is built and uploaded from this checkout, not from CI — the
+keystore never leaves the machine. Create the GitHub release with its notes
+first, then:
+
+```bash
+cp keystore.properties.example keystore.properties   # once, then fill in real values
+git tag v1.4.1 && git push origin v1.4.1   # tag must match versionName in app/build.gradle.kts
+scripts/upload-release-apk.sh v1.4.1                  # add --dry-run to rehearse
+```
+
+The script refuses to run unless the tree is clean, the tag is checked out and
+pushed, the release exists, and the built APK carries the release key. For the
+same reason `app/build.gradle.kts` fails a release build when
+`keystore.properties` is missing: an unsigned APK installs on nothing.
+
+Play gets an AAB and re-signs it with Google's app-signing key, so the Play
+build and the GitHub APK are not interchangeable — moving between them needs an
+uninstall.
+
 ## Architecture
 
 ```
