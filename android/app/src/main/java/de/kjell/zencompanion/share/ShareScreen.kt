@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
@@ -303,7 +302,10 @@ private fun Picker(
         // groups where folders appear as indented plain-text rows.
         var menuOpen by remember { mutableStateOf(false) }
         var folderMenuOpen by remember { mutableStateOf(false) }
-        Box {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
             PinDestinationPicker(
                 spaces = spaces,
                 selected = selected,
@@ -323,15 +325,14 @@ private fun Picker(
                 // now could only contradict what is being written.
                 enabled = !saving,
             )
-        }
 
-        if (allowsNormalTabs) {
-            SaveKindPicker(
-                selected = saveKind,
-                onSelect = onSelectSaveKind,
-                enabled = !saving,
-                modifier = Modifier.padding(top = 16.dp, start = 24.dp, end = 24.dp),
-            )
+            if (allowsNormalTabs) {
+                SaveKindMenuButton(
+                    selected = saveKind,
+                    onSelect = onSelectSaveKind,
+                    enabled = !saving,
+                )
+            }
         }
 
         Spacer(Modifier.weight(1f))
@@ -381,15 +382,15 @@ private fun Picker(
 }
 
 /**
- * Compact per-share override, styled like the space picker but smaller.
- * Only shown when the synced browser can write normal tabs; leaving it
- * untouched keeps the persisted setting.
+ * Round per-share kind menu beside the destination pill. It keeps the
+ * pin/tab-stack look and opens the pinned/normal choice on tap. Only shown
+ * when the synced browser can write normal tabs; leaving it untouched keeps
+ * the persisted setting.
  */
 @Composable
-private fun SaveKindPicker(
+private fun SaveKindMenuButton(
     selected: SaveKind,
     onSelect: (SaveKind) -> Unit,
-    modifier: Modifier = Modifier,
     enabled: Boolean = true,
 ) {
     val colors = LocalZenColors.current
@@ -402,38 +403,29 @@ private fun SaveKindPicker(
         },
     )
     var menuOpen by remember { mutableStateOf(false) }
-    Box(modifier) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
+    // Matches the destination pill's own top inset, so both sit on one line.
+    Box(Modifier.padding(top = 28.dp)) {
+        Box(
+            contentAlignment = Alignment.Center,
             modifier = Modifier
-                .alpha(if (enabled) 1f else 0.55f)
-                .background(colors.lift, Capsule)
-                .liftRim(Capsule)
+                .size(48.dp)
                 .clickable(enabled = enabled) { menuOpen = true }
-                .semantics { contentDescription = "$saveAs: $kindLabel" }
-                .padding(horizontal = 12.dp, vertical = 6.dp)
-                // Transparent margin keeps the visual pill compact while the
-                // tappable area reaches the 48 dp Material minimum.
-                .padding(vertical = 10.dp),
+                .semantics { contentDescription = "$saveAs: $kindLabel" },
         ) {
-            SaveKindIcon(
-                kind = selected,
-                size = 14.dp,
-                tint = colors.ink,
-            )
-            Spacer(Modifier.width(7.dp))
-            Text(
-                text = kindLabel,
-                style = ZenType.rounded(14, FontWeight.SemiBold),
-                color = colors.ink,
-            )
-            Spacer(Modifier.width(7.dp))
-            Image(
-                painter = painterResource(R.drawable.ic_chevron_up_down),
-                contentDescription = null,
-                colorFilter = ColorFilter.tint(colors.ink50),
-                modifier = Modifier.size(11.dp),
-            )
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .size(44.dp)
+                    .alpha(if (enabled) 1f else 0.55f)
+                    .background(colors.lift, CircleShape)
+                    .liftRim(CircleShape),
+            ) {
+                SaveKindIcon(
+                    kind = selected,
+                    size = 16.dp,
+                    tint = colors.ink,
+                )
+            }
         }
 
         DropdownMenu(
