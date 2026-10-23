@@ -154,7 +154,7 @@ struct ShareSheetView: View {
                 .accessibilityLabel(Text("share.workspace"))
 
                 if model.allowsNormalTabs {
-                    saveKindToggle
+                    saveKindMenu
                 }
             }
             .padding(.top, 28)
@@ -202,12 +202,26 @@ struct ShareSheetView: View {
         }
     }
 
-    /// Per-share pin/normal switch, a round companion to the destination pill
-    /// instead of a second capsule. Only shown when the synced browser can
-    /// write normal tabs; leaving it untouched keeps the persisted setting.
-    private var saveKindToggle: some View {
-        Button {
-            model.selectSaveKind(model.saveKind == .pinned ? .normal : .pinned)
+    /// Per-share kind menu: the round companion to the destination pill, but
+    /// tapping it opens the pinned/normal choice instead of toggling. Only
+    /// shown when the synced browser can write normal tabs; leaving it
+    /// untouched keeps the persisted setting.
+    private var saveKindMenu: some View {
+        Menu {
+            ForEach(SaveKind.allCases) { kind in
+                let title = kind == .pinned
+                    ? String(localized: "share.save_kind.pinned_menu")
+                    : String(localized: "share.save_kind.normal_menu")
+                Button {
+                    model.selectSaveKind(kind)
+                } label: {
+                    if model.saveKind == kind {
+                        Label(title, systemImage: "checkmark")
+                    } else {
+                        Text(title)
+                    }
+                }
+            }
         } label: {
             Image(systemName: model.saveKind == .pinned ? "pin.fill" : "rectangle.stack")
                 .font(.system(size: 15, weight: .semibold))
@@ -219,7 +233,6 @@ struct ShareSheetView: View {
                 .glassRimCapsule()
                 .contentShape(Circle())
         }
-        .buttonStyle(PressedButtonStyle())
         .accessibilityLabel(Text("share.save_as"))
         .accessibilityValue(Text(LocalizedStringKey(model.saveKind == .pinned ? "share.save_kind.pinned" : "share.save_kind.normal")))
         .accessibilityHint(Text("share.save_kind.hint"))
