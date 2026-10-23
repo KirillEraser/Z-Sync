@@ -139,11 +139,11 @@ struct ShareSheetView: View {
                     scheme: effectiveScheme,
                     titleSize: 17,
                     allowsFolders: model.saveKind == .pinned,
+                    isEnabled: model.phase != .saving,
                     onSelect: { chosen in
                         model.selectDestination(chosen)
                     }
                 )
-                .fixedSize()
                 .padding(.horizontal, 18)
                 .padding(.vertical, 11)
                 .background(
@@ -154,7 +154,10 @@ struct ShareSheetView: View {
                 .accessibilityLabel(Text("share.workspace"))
 
                 if model.allowsNormalTabs {
+                    // Keep the round button whole; the pill is the part that
+                    // may have to truncate on a narrow sheet.
                     saveKindMenu
+                        .layoutPriority(1)
                 }
             }
             .padding(.top, 28)
@@ -208,20 +211,20 @@ struct ShareSheetView: View {
     /// untouched keeps the persisted setting.
     private var saveKindMenu: some View {
         Menu {
-            ForEach(SaveKind.allCases) { kind in
-                let title = kind == .pinned
-                    ? String(localized: "share.save_kind.pinned_menu")
-                    : String(localized: "share.save_kind.normal_menu")
-                Button {
-                    model.selectSaveKind(kind)
-                } label: {
-                    if model.saveKind == kind {
-                        Label(title, systemImage: "checkmark")
-                    } else {
-                        Text(title)
-                    }
-                }
+            // A picker gives the menu its native checkmark and lets VoiceOver
+            // announce the selected option.
+            Picker(
+                selection: Binding(
+                    get: { model.saveKind },
+                    set: { model.selectSaveKind($0) }
+                )
+            ) {
+                Text("share.save_kind.pinned_menu").tag(SaveKind.pinned)
+                Text("share.save_kind.normal_menu").tag(SaveKind.normal)
+            } label: {
+                Text("share.save_as")
             }
+            .pickerStyle(.inline)
         } label: {
             Image(systemName: model.saveKind == .pinned ? "pin.fill" : "rectangle.stack")
                 .font(.system(size: 15, weight: .semibold))

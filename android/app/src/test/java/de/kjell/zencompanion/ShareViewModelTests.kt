@@ -366,6 +366,34 @@ class ShareViewModelTests {
         advanceUntilIdle()
     }
 
+    /** The common older-browser case: no readable prefs record at all still
+     * writes pinned, even when the stored default says normal. */
+    @Test
+    fun absentCapabilitySavesPinnedEvenWhenTheSavedDefaultIsNormal() =
+        runTest(mainDispatcherRule.testDispatcher) {
+            val space = testSpace("s1")
+            val repository = FakeShareRepository(
+                signedIn = true,
+                cached = testSnapshot(space, ZenSpaces.NormalTabsCapability.ABSENT),
+                fresh = testSnapshot(space, ZenSpaces.NormalTabsCapability.ABSENT),
+                saveKind = SaveKind.NORMAL,
+            )
+            val vm = ShareViewModel(
+                repository = repository,
+                initialUrl = "https://example.com/page",
+                initialPageTitle = "Page",
+            )
+            runCurrent()
+
+            assertFalse(vm.state.value.allowsNormalTabs)
+            assertEquals(SaveKind.PINNED, vm.state.value.saveKind)
+
+            vm.save()
+            runCurrent()
+            assertEquals(SaveKind.PINNED, repository.added.first().kind)
+            advanceUntilIdle()
+        }
+
     /** A capability that arrives with the fresh snapshot applies the saved
      * default, but never replaces a choice the user already made. */
     @Test

@@ -268,6 +268,26 @@ final class ShareModelTests: XCTestCase {
         XCTAssertEqual(session.added.first?.kind, .pinned)
     }
 
+    /// The common older-browser case: no readable prefs record at all still
+    /// writes pinned, even when the stored default says normal.
+    func testAbsentCapabilitySavesPinnedEvenWhenTheSavedDefaultIsNormal() async {
+        let space = space("s1")
+        let session = FakeShareSession(
+            signedIn: true,
+            cached: snapshot([space], capability: .absent),
+            fresh: snapshot([space], capability: .absent),
+            saveKind: .normal
+        )
+        let model = makeModel(session: session)
+        await model.bootstrap()
+
+        XCTAssertFalse(model.allowsNormalTabs)
+        XCTAssertEqual(model.saveKind, .pinned)
+
+        await model.save()
+        XCTAssertEqual(session.added.first?.kind, .pinned)
+    }
+
     /// A capability that arrives with the fresh snapshot applies the saved
     /// default, but never replaces a choice the user already made.
     func testFreshCapabilityAppliesTheSavedDefaultUnlessTheUserChose() async {

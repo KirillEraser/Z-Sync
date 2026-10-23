@@ -42,7 +42,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -305,6 +307,7 @@ private fun Picker(
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.padding(horizontal = 24.dp),
         ) {
             PinDestinationPicker(
                 spaces = spaces,
@@ -319,6 +322,7 @@ private fun Picker(
                 onFolderMenuOpenChange = { folderMenuOpen = it },
                 onMenuWillOpen = {},
                 onMenuDidDismiss = {},
+                modifier = Modifier.weight(1f, fill = false),
                 style = PinDestinationPickerStyle.ShareCapsule,
                 hideFolders = hideFolders,
                 // The write is already in flight; changing the destination
@@ -410,7 +414,10 @@ private fun SaveKindMenuButton(
             modifier = Modifier
                 .size(48.dp)
                 .clickable(enabled = enabled) { menuOpen = true }
-                .semantics { contentDescription = "$saveAs: $kindLabel" },
+                .semantics {
+                    contentDescription = saveAs
+                    stateDescription = kindLabel
+                },
         ) {
             Box(
                 contentAlignment = Alignment.Center,
@@ -435,6 +442,7 @@ private fun SaveKindMenuButton(
             for (kind in SaveKind.entries) {
                 val isSelected = selected == kind
                 DropdownMenuItem(
+                    modifier = Modifier.semantics { this.selected = isSelected },
                     text = {
                         Text(
                             text = stringResource(

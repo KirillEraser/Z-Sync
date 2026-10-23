@@ -221,6 +221,8 @@ struct PinDestinationMenuButton: UIViewRepresentable {
     /// Normal-tab saves always land at the space root, so the "Pin to Folder…"
     /// submenu is hidden when false.
     var allowsFolders: Bool = true
+    /// False while a save is in flight, so the target cannot change mid-write.
+    var isEnabled: Bool = true
     /// Overrides the button title/icon ink (e.g. when the host capsule is
     /// brand-tinted and the scheme-derived ink would not contrast).
     var inkColor: UIColor? = nil
@@ -255,6 +257,7 @@ struct PinDestinationMenuButton: UIViewRepresentable {
                 )
             }
         }
+        button.isEnabled = isEnabled
         button.setContentHuggingPriority(.required, for: .horizontal)
         button.setContentCompressionResistancePriority(.required, for: .horizontal)
         updateButton(button, context: context)
@@ -263,6 +266,7 @@ struct PinDestinationMenuButton: UIViewRepresentable {
 
     func updateUIView(_ uiView: UIButton, context: Context) {
         context.coordinator.parent = self
+        uiView.isEnabled = isEnabled
         updateButton(uiView, context: context)
         // Refresh the menu only while it is NOT presented: rebuilding it
         // while open (e.g. on WebView progress re-renders) would close it.
