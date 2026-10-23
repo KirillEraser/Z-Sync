@@ -103,7 +103,7 @@ fun WhatsNewSheet(onDismiss: () -> Unit) {
 
                 Spacer(Modifier.height(28.dp))
 
-                Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(30.dp)) {
                     WhatsNewRelease.items.forEach { item ->
                         WhatsNewRow(item)
                     }

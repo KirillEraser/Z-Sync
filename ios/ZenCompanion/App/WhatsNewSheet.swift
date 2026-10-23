@@ -18,7 +18,7 @@ struct WhatsNewSheet: View {
                 VStack(alignment: .leading, spacing: 28) {
                     header
 
-                    VStack(alignment: .leading, spacing: 24) {
+                    VStack(alignment: .leading, spacing: 30) {
                         ForEach(release.items) { item in
                             row(item)
                         }

@@ -21,26 +21,26 @@ struct WhatsNewRelease: Equatable {
         WhatsNewItem(
             id: "share-save-kind",
             systemImage: "square.and.arrow.up",
-            title: "Choose pin or normal when sharing",
-            detail: "Pick pin or normal per share, without changing your default."
+            title: "Choose pinned or normal when sharing",
+            detail: "Pick pinned or normal for each link you share. Default unchanged."
         ),
         WhatsNewItem(
             id: "tab-controls",
             systemImage: "rectangle.on.rectangle",
             title: "More control over tabs",
-            detail: "Move pinned tabs into folders or pin normal tabs from the menu."
+            detail: "Move pinned tabs into folders or pin normal tabs from their context menu."
         ),
         WhatsNewItem(
             id: "open-into-search",
             systemImage: "magnifyingglass",
             title: "Open straight into search",
-            detail: "Open a fresh search tab whenever you come back to the app."
+            detail: "Start a fresh search each time you open the app."
         ),
         WhatsNewItem(
             id: "more",
             systemImage: "sparkles",
             title: "Plus a few more things",
-            detail: "Folder icons, an essentials-per-row option, and many smaller fixes."
+            detail: "Folder icons, essentials per row, and many smaller fixes."
         )
     ])
 }

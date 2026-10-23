@@ -186,12 +186,12 @@
     <string name="whats_new_title">What\'s New</string>
     <string name="whats_new_subtitle">Here\'s what changed in this update.</string>
     <string name="whats_new_done">Done</string>
-    <string name="whats_new_item_share_title">Choose pin or normal when sharing</string>
-    <string name="whats_new_item_share_detail">Pick pin or normal per share, without changing your default.</string>
+    <string name="whats_new_item_share_title">Choose pinned or normal when sharing</string>
+    <string name="whats_new_item_share_detail">Pick pinned or normal for each link you share. Default unchanged.</string>
     <string name="whats_new_item_search_title">Open straight into search</string>
-    <string name="whats_new_item_search_detail">Open a fresh search tab whenever you come back to the app.</string>
+    <string name="whats_new_item_search_detail">Start a fresh search each time you open the app.</string>
     <string name="whats_new_item_tab_controls_title">More control over tabs</string>
-    <string name="whats_new_item_tab_controls_detail">Move pinned tabs into folders or pin normal tabs from the menu.</string>
+    <string name="whats_new_item_tab_controls_detail">Move pinned tabs into folders or pin normal tabs from their context menu.</string>
     <string name="whats_new_item_more_title">Plus a few more things</string>
-    <string name="whats_new_item_more_detail">Folder icons, an essentials-per-row option, and many smaller fixes.</string>
+    <string name="whats_new_item_more_detail">Folder icons, essentials per row, and many smaller fixes.</string>
 </resources>
