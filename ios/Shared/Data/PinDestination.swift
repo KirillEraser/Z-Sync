@@ -264,6 +264,15 @@ struct PinDestinationMenuButton: UIViewRepresentable {
         return button
     }
 
+    /// Keeps the pill at its natural height (a bare representable would
+    /// stretch to the proposed height) while letting it give up width so the
+    /// row can never push the kind button off the sheet.
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UIButton, context: Context) -> CGSize? {
+        let intrinsic = uiView.intrinsicContentSize
+        let width = proposal.width.map { min(intrinsic.width, $0) } ?? intrinsic.width
+        return CGSize(width: width, height: intrinsic.height)
+    }
+
     func updateUIView(_ uiView: UIButton, context: Context) {
         context.coordinator.parent = self
         uiView.isEnabled = isEnabled
@@ -278,6 +287,7 @@ struct PinDestinationMenuButton: UIViewRepresentable {
     private func updateButton(_ button: UIButton, context: Context) {
         var config = UIButton.Configuration.plain()
         config.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0)
+        config.titleLineBreakMode = .byTruncatingTail
 
         let fallbackInk = scheme == .dark ? UIColor.white : UIColor(red: 0.1, green: 0.1, blue: 0.12, alpha: 1.0)
         let ink = inkColor ?? fallbackInk
