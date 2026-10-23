@@ -19,7 +19,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.PushPin
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -398,6 +398,7 @@ private fun SaveKindMenuButton(
     enabled: Boolean = true,
 ) {
     val colors = LocalZenColors.current
+    val context = LocalContext.current
     val saveAs = stringResource(R.string.share_save_as)
     val kindLabel = stringResource(
         if (selected == SaveKind.PINNED) {
@@ -474,6 +475,7 @@ private fun SaveKindMenuButton(
                     },
                     onClick = {
                         menuOpen = false
+                        Haptics.perform(context, Haptics.Kind.SELECTION)
                         onSelect(kind)
                     },
                 )
@@ -486,7 +488,7 @@ private fun SaveKindMenuButton(
 private fun SaveKindIcon(kind: SaveKind, size: Dp, tint: Color) {
     if (kind == SaveKind.PINNED) {
         Icon(
-            imageVector = Icons.Outlined.PushPin,
+            imageVector = Icons.Filled.PushPin,
             contentDescription = null,
             tint = tint,
             modifier = Modifier.size(size),
