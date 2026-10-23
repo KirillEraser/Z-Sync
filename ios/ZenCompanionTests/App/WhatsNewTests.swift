@@ -71,13 +71,13 @@ final class WhatsNewTests: XCTestCase {
         }
     }
 
-    func testReleaseCoversTheShareSaveKindAndBrowserErrors() {
+    func testReleaseCoversTheShareSaveKindAndTabControls() {
         let ids = Set(WhatsNewRelease.latest.items.map(\.id))
 
-        // PR #45 must be listed even while it is still open, and the error
-        // panel (#44) is part of this release.
+        // PR #45 must be listed even while it is still open. Tab controls
+        // cover moving pinned tabs into folders and pinning normal tabs.
         XCTAssertTrue(ids.contains("share-save-kind"))
-        XCTAssertTrue(ids.contains("browser-error-panel"))
+        XCTAssertTrue(ids.contains("tab-controls"))
     }
 
     func testReleaseSplitsIntoTwoPagesWithoutLosingItems() {

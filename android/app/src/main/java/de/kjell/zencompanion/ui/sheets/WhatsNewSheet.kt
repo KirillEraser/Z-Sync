@@ -22,14 +22,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Build
 import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.GridView
-import androidx.compose.material.icons.outlined.ScreenRotation
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Share
-import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -292,10 +291,9 @@ private fun WhatsNewRow(item: WhatsNewItem) {
 private val WhatsNewIcon.imageVector: ImageVector
     get() = when (this) {
         WhatsNewIcon.SHARE -> Icons.Outlined.Share
-        WhatsNewIcon.ERROR_PAGE -> Icons.Outlined.ErrorOutline
-        WhatsNewIcon.GRID -> Icons.Outlined.GridView
+        WhatsNewIcon.TAB_MENU -> Icons.Outlined.MoreVert
         WhatsNewIcon.SEARCH -> Icons.Outlined.Search
         WhatsNewIcon.FOLDER -> Icons.Outlined.Folder
-        WhatsNewIcon.ROTATION -> Icons.Outlined.ScreenRotation
-        WhatsNewIcon.SYNC -> Icons.Outlined.Sync
+        WhatsNewIcon.GRID -> Icons.Outlined.GridView
+        WhatsNewIcon.FIXES -> Icons.Outlined.Build
     }

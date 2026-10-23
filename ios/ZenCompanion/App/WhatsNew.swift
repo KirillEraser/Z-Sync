@@ -25,16 +25,10 @@ struct WhatsNewRelease: Equatable {
             detail: "A new Save as menu in the share sheet saves each link as a pinned or normal tab, without changing your default."
         ),
         WhatsNewItem(
-            id: "browser-error-panel",
-            systemImage: "exclamationmark.triangle",
-            title: "Clearer browser errors",
-            detail: "When a page is offline, can't be found, or has a certificate problem, the quick browser says what happened and offers to try again."
-        ),
-        WhatsNewItem(
-            id: "essentials-per-row",
-            systemImage: "square.grid.2x2",
-            title: "Set essentials per row",
-            detail: "Pick how many essentials fit on a row under Advanced. Short rows now stretch to fill the width."
+            id: "tab-controls",
+            systemImage: "contextualmenu.and.cursorarrow",
+            title: "More control over tabs",
+            detail: "Move pinned tabs into folders from the tab menu, or pin a normal tab without opening it."
         ),
         WhatsNewItem(
             id: "open-into-search",
@@ -43,22 +37,22 @@ struct WhatsNewRelease: Equatable {
             detail: "Turn on Open into search to open a fresh search tab whenever you come back to the app."
         ),
         WhatsNewItem(
-            id: "folders",
+            id: "folder-icons",
             systemImage: "folder",
-            title: "Folders do more",
-            detail: "Move pinned tabs into folders from the tab menu, and synced folder icons now show inside the folder flap."
+            title: "See folder icons",
+            detail: "Synced folder icons now show inside the folder flap, like on the desktop."
         ),
         WhatsNewItem(
-            id: "ipad-full-screen",
-            systemImage: "arrow.up.left.and.arrow.down.right",
-            title: "Full screen on iPad",
-            detail: "The quick browser now fills the whole screen on iPad, so pages get every edge."
+            id: "essentials-per-row",
+            systemImage: "square.grid.2x2",
+            title: "Set essentials per row",
+            detail: "Pick how many essentials fit on a row under Advanced."
         ),
         WhatsNewItem(
-            id: "steadier-sync",
-            systemImage: "arrow.triangle.2.circlepath",
-            title: "Steadier sync",
-            detail: "If a refresh fails, your spaces stay put and a short message explains why. Expired sign-ins now recover cleanly."
+            id: "more-fixes",
+            systemImage: "wrench.and.screwdriver",
+            title: "Plus many more fixes",
+            detail: "Smaller bug fixes and polish across the browser, sharing, and sync."
         )
     ])
 

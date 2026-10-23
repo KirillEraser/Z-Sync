@@ -84,13 +84,13 @@ class WhatsNewTests {
     }
 
     @Test
-    fun releaseCoversTheShareSaveKindAndBrowserErrors() {
+    fun releaseCoversTheShareSaveKindAndTabControls() {
         val ids = WhatsNewRelease.items.map { it.id }.toSet()
 
-        // PR #45 must be listed even while it is still open, and the error
-        // panel (#44) is part of this release.
+        // PR #45 must be listed even while it is still open. Tab controls
+        // cover moving pinned tabs into folders and pinning normal tabs.
         assertTrue(ids.contains("share-save-kind"))
-        assertTrue(ids.contains("browser-error-panel"))
+        assertTrue(ids.contains("tab-controls"))
     }
 
     @Test

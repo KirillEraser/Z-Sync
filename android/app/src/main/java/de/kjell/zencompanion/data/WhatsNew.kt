@@ -7,12 +7,11 @@ import de.kjell.zencompanion.R
 /** Badge artwork for one release note. Mapped to a Material icon in the UI. */
 enum class WhatsNewIcon {
     SHARE,
-    ERROR_PAGE,
-    GRID,
+    TAB_MENU,
     SEARCH,
     FOLDER,
-    ROTATION,
-    SYNC,
+    GRID,
+    FIXES,
 }
 
 /**
@@ -40,16 +39,10 @@ object WhatsNewRelease {
             icon = WhatsNewIcon.SHARE,
         ),
         WhatsNewItem(
-            id = "browser-error-panel",
-            titleRes = R.string.whats_new_item_errors_title,
-            detailRes = R.string.whats_new_item_errors_detail,
-            icon = WhatsNewIcon.ERROR_PAGE,
-        ),
-        WhatsNewItem(
-            id = "essentials-per-row",
-            titleRes = R.string.whats_new_item_essentials_title,
-            detailRes = R.string.whats_new_item_essentials_detail,
-            icon = WhatsNewIcon.GRID,
+            id = "tab-controls",
+            titleRes = R.string.whats_new_item_tab_controls_title,
+            detailRes = R.string.whats_new_item_tab_controls_detail,
+            icon = WhatsNewIcon.TAB_MENU,
         ),
         WhatsNewItem(
             id = "open-into-search",
@@ -58,22 +51,22 @@ object WhatsNewRelease {
             icon = WhatsNewIcon.SEARCH,
         ),
         WhatsNewItem(
-            id = "folders",
-            titleRes = R.string.whats_new_item_folders_title,
-            detailRes = R.string.whats_new_item_folders_detail,
+            id = "folder-icons",
+            titleRes = R.string.whats_new_item_folder_icons_title,
+            detailRes = R.string.whats_new_item_folder_icons_detail,
             icon = WhatsNewIcon.FOLDER,
         ),
         WhatsNewItem(
-            id = "rotation",
-            titleRes = R.string.whats_new_item_rotation_title,
-            detailRes = R.string.whats_new_item_rotation_detail,
-            icon = WhatsNewIcon.ROTATION,
+            id = "essentials-per-row",
+            titleRes = R.string.whats_new_item_essentials_title,
+            detailRes = R.string.whats_new_item_essentials_detail,
+            icon = WhatsNewIcon.GRID,
         ),
         WhatsNewItem(
-            id = "steadier-sync",
-            titleRes = R.string.whats_new_item_sync_title,
-            detailRes = R.string.whats_new_item_sync_detail,
-            icon = WhatsNewIcon.SYNC,
+            id = "more-fixes",
+            titleRes = R.string.whats_new_item_more_fixes_title,
+            detailRes = R.string.whats_new_item_more_fixes_detail,
+            icon = WhatsNewIcon.FIXES,
         ),
     )
 
