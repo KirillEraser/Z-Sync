@@ -81,6 +81,7 @@ fun SettingsSheet(
     onSetToolbarPlacement: (ToolbarPlacement) -> Unit,
     onSetOpenIntoSearch: (Boolean) -> Unit,
     onSignOut: () -> Unit,
+    onOpenWhatsNew: () -> Unit,
     onDone: () -> Unit,
 ) {
     var showSignOutDialog by remember { mutableStateOf(false) }
@@ -306,7 +307,7 @@ fun SettingsSheet(
             )
 
             // Feedback Section
-            SettingsAboutSection()
+            SettingsAboutSection(onOpenWhatsNew = onOpenWhatsNew)
         }
     }
 }

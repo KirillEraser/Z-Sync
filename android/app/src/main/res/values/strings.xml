@@ -155,6 +155,7 @@
     <string name="settings_about_section">About</string>
     <string name="settings_feedback_section">Feedback</string>
     <string name="settings_version">Version</string>
+    <string name="settings_whats_new">What\'s New</string>
     <string name="settings_sign_out_dialog_title">Sign out?</string>
     <string name="settings_sign_out_dialog_message">Are you sure you want to sign out of your Mozilla account?</string>
     <string name="settings_sign_out_confirm">Sign out</string>
@@ -186,4 +187,16 @@
     <string name="browser_reload">Reload</string>
     <string name="browser_stop">Stop</string>
     <string name="browser_clear_search">Clear search</string>
+
+    <string name="whats_new_title">What\'s New</string>
+    <string name="whats_new_subtitle">Here\'s what changed in this update.</string>
+    <string name="whats_new_done">Done</string>
+    <string name="whats_new_item_share_title">Choose pinned or normal when sharing</string>
+    <string name="whats_new_item_share_detail">Pick pinned or normal for each link you share. Default unchanged.</string>
+    <string name="whats_new_item_search_title">Open straight into search</string>
+    <string name="whats_new_item_search_detail">Start a fresh search each time you open the app.</string>
+    <string name="whats_new_item_tab_controls_title">More control over tabs</string>
+    <string name="whats_new_item_tab_controls_detail">Move pinned tabs into folders or pin normal tabs from their context menu.</string>
+    <string name="whats_new_item_more_title">Plus a few more things</string>
+    <string name="whats_new_item_more_detail">Folder icons, essentials per row, and many smaller fixes.</string>
 </resources>
