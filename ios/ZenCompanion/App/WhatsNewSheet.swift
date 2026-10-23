@@ -72,8 +72,7 @@ struct WhatsNewSheet: View {
 
     private var firstHeader: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top) {
-                ZenMark(scheme: scheme, size: 56)
+            HStack {
                 Spacer(minLength: 12)
                 closeButton
             }

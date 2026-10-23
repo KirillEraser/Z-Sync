@@ -53,7 +53,6 @@ import de.kjell.zencompanion.R
 import de.kjell.zencompanion.data.WhatsNewIcon
 import de.kjell.zencompanion.data.WhatsNewItem
 import de.kjell.zencompanion.data.WhatsNewRelease
-import de.kjell.zencompanion.ui.components.ZenMark
 import kotlinx.coroutines.launch
 
 /**
@@ -148,14 +147,12 @@ private fun WhatsNewPage(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.End,
             ) {
-                ZenMark(size = 56.dp)
-                Spacer(Modifier.weight(1f))
                 CloseButton(onClose)
             }
 
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(4.dp))
 
             Text(
                 text = stringResource(R.string.whats_new_title),
