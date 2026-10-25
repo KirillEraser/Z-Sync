@@ -186,6 +186,14 @@ class ZenSpacesDecoderTests {
         assertEquals(expect.getString("folderId"), folder.folderId)
         assertEquals(expectStrings(expect, "children"), folder.children)
         assertEquals(expectNullableString(expect, "icon"), folder.icon)
+        assertEquals(expectNullableString(expect, "liveType"), folder.live?.type)
+        assertEquals(expectNullableString(expect, "liveSourceURL"), folder.live?.sourceURL)
+    }
+
+    @Test
+    fun folderWithoutLiveObjectHasNoLiveMetadata() {
+        val basic = folderRecord("wire-folder-basic")
+        assertNull(basic.live)
     }
 
     /** Hostile (wire-folder-missing-folderid): folder-shaped for matching, never a match. */

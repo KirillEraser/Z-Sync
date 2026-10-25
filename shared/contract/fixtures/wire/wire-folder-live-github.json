@@ -1,0 +1,46 @@
+{
+  "contract": 1,
+  "id": "wire-folder-live-github",
+  "purpose": "A GitHub live folder keeps its provider id and pull-requests source URL; the provider's filters and repo list stay unmodelled state.",
+  "input": {
+    "id": "f-live-github",
+    "kind": "folder",
+    "data": {
+      "folderId": "f-live-github",
+      "name": "Pull Requests",
+      "icon": "chrome://browser/skin/zen-icons/selectable/logo-github.svg",
+      "workspaceUuid": "space-a",
+      "parentFolderId": null,
+      "live": {
+        "type": "github",
+        "state": {
+          "type": "pull-requests",
+          "url": "https://github.com/pulls",
+          "repos": ["zen-browser/desktop"],
+          "options": {
+            "authorMe": false,
+            "assignedMe": true,
+            "reviewRequested": true,
+            "includeDrafts": true,
+            "repoExcludes": []
+          },
+          "interval": 1800000,
+          "isJsonApi": true
+        }
+      },
+      "children": []
+    }
+  },
+  "expect": {
+    "decodesAs": "folder",
+    "folderId": "f-live-github",
+    "name": "Pull Requests",
+    "icon": "chrome://browser/skin/zen-icons/selectable/logo-github.svg",
+    "workspaceUuid": "space-a",
+    "parentFolderId": null,
+    "children": [],
+    "isLiveFolder": true,
+    "liveType": "github",
+    "liveSourceURL": "https://github.com/pulls"
+  }
+}

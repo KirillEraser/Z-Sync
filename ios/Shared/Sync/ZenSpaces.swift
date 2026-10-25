@@ -417,10 +417,12 @@ struct ZenFolderRecord: Codable {
     var icon: String?
     var workspaceUuid: String?
     var parentFolderId: String?
+    /// Live-folder provider metadata (SPEC §3.5.1). Nil for a plain folder.
+    var live: ZenLiveFolder?
     var children: [String]?
 
     private enum FolderKeys: String, CodingKey {
-        case folderId, name, icon, workspaceUuid, parentFolderId, children
+        case folderId, name, icon, workspaceUuid, parentFolderId, live, children
     }
 
     init(
@@ -429,6 +431,7 @@ struct ZenFolderRecord: Codable {
         icon: String? = nil,
         workspaceUuid: String? = nil,
         parentFolderId: String? = nil,
+        live: ZenLiveFolder? = nil,
         children: [String]? = nil
     ) {
         self.folderId = folderId
@@ -436,6 +439,7 @@ struct ZenFolderRecord: Codable {
         self.icon = icon
         self.workspaceUuid = workspaceUuid
         self.parentFolderId = parentFolderId
+        self.live = live
         self.children = children
     }
 
@@ -446,7 +450,61 @@ struct ZenFolderRecord: Codable {
         icon = try? c.decodeIfPresent(String.self, forKey: .icon)
         workspaceUuid = try? c.decodeIfPresent(String.self, forKey: .workspaceUuid)
         parentFolderId = try? c.decodeIfPresent(String.self, forKey: .parentFolderId)
+        live = try? c.decodeIfPresent(ZenLiveFolder.self, forKey: .live)
         children = try? c.decodeIfPresent([String].self, forKey: .children)
+    }
+}
+
+/// Provider metadata of a live folder (SPEC §3.5.1). Zen syncs only how the
+/// folder is generated; the generated items are never part of the collection.
+struct ZenLiveFolder: Codable, Hashable {
+    /// Provider id, e.g. `rss` or `github`. Unknown ids are kept so the folder
+    /// still renders as a live folder.
+    var type: String?
+    /// `state.url`, only when it is an absolute http(s) URL with a host.
+    var sourceURL: String?
+
+    init(type: String? = nil, sourceURL: String? = nil) {
+        self.type = type
+        self.sourceURL = sourceURL
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case type, state
+    }
+
+    private struct State: Codable {
+        var url: String?
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let rawType = try? c.decodeIfPresent(String.self, forKey: .type)
+        let trimmed = rawType?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        type = trimmed.isEmpty ? nil : trimmed
+        let state = try? c.decodeIfPresent(State.self, forKey: .state)
+        sourceURL = Self.validSource(state?.url)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encodeIfPresent(type, forKey: .type)
+        if let sourceURL {
+            try c.encode(State(url: sourceURL), forKey: .state)
+        }
+    }
+
+    /// SPEC §3.5.1: only an absolute `http`/`https` URL with a host is a source.
+    static func validSource(_ raw: String?) -> String? {
+        guard let raw = raw?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !raw.isEmpty,
+              let url = URL(string: raw),
+              let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https",
+              let host = url.host,
+              !host.isEmpty
+        else { return nil }
+        return raw
     }
 }
 
@@ -575,19 +633,23 @@ struct ZenFolder: Identifiable, Hashable, Codable {
     var tabs: [ZenTab]
     /// Folders nested inside this one, in sidebar order. Nil = none.
     var subfolders: [ZenFolder]?
+    /// Live-folder provider metadata (SPEC §3.5.1). Nil for a plain folder.
+    var live: ZenLiveFolder?
 
     init(
         id: String,
         name: String,
         icon: String? = nil,
         tabs: [ZenTab] = [],
-        subfolders: [ZenFolder]? = nil
+        subfolders: [ZenFolder]? = nil,
+        live: ZenLiveFolder? = nil
     ) {
         self.id = id
         self.name = name
         self.icon = icon
         self.tabs = tabs
         self.subfolders = subfolders
+        self.live = live
     }
 }
 

@@ -20,7 +20,7 @@ final class ContractFixtureTests: XCTestCase {
     /// every fixture must declare contract 1 (the loader fatalErrors loudly
     /// on drift; the explicit asserts below double-check).
     func testEveryFixtureDeclaresContractVersion1() {
-        XCTAssertEqual(ContractFixtures.all.count, 30, "fixture list must track shared/contract/fixtures")
+        XCTAssertEqual(ContractFixtures.all.count, 32, "fixture list must track shared/contract/fixtures")
         for name in ContractFixtures.all {
             let obj = ContractFixtures.json(name)
             XCTAssertEqual(obj["contract"] as? Int, 1, name)
@@ -40,6 +40,7 @@ final class ContractFixtureTests: XCTestCase {
         let fixtures = [
             "wire-deleted-string",
             "wire-folder-basic",
+            "wire-folder-live-github",
             "wire-folder-live-object",
             "wire-layout-basic",
             "wire-space-basic",
@@ -74,6 +75,38 @@ final class ContractFixtureTests: XCTestCase {
             } else {
                 XCTFail("\(name): expect carries neither dropped nor decodesAs")
             }
+        }
+    }
+
+    // MARK: - Live folders (SPEC §3.5.1)
+
+    /// `wire-folder-live-github` + `wire-folder-live-shapes`: the provider id
+    /// and source URL are schema, everything else is opaque provider state, and
+    /// only a JSON object with a usable source counts as a live folder.
+    func testFolderLiveMetadataShapes() {
+        let githubFixture = ContractFixtures.json("wire-folder-live-github")
+        let githubInput = githubFixture["input"] as! [String: Any]
+        let githubExpect = githubFixture["expect"] as! [String: Any]
+        guard case .folder(let github)? = ZenSpacesDecoder.decode(
+            id: githubInput["id"] as! String, cleartext: githubInput
+        ) else { return XCTFail("github live folder must decode as folder") }
+        XCTAssertEqual(github.live?.type, githubExpect["liveType"] as? String)
+        XCTAssertEqual(github.live?.sourceURL, githubExpect["liveSourceURL"] as? String)
+        XCTAssertEqual(github.children, githubExpect["children"] as? [String])
+
+        for record in ContractFixtures.cases("wire-folder-live-shapes") {
+            let caseId = record["id"] as? String ?? "?"
+            let input = record["input"] as! [String: Any]
+            let expect = record["expect"] as! [String: Any]
+            guard case .folder(let folder)? = ZenSpacesDecoder.decode(
+                id: input["id"] as! String, cleartext: input
+            ) else {
+                XCTFail("\(caseId): expected a folder record")
+                continue
+            }
+            XCTAssertEqual(folder.live != nil, expect["isLiveFolder"] as? Bool ?? false, caseId)
+            XCTAssertEqual(folder.live?.type, expect["liveType"] as? String, caseId)
+            XCTAssertEqual(folder.live?.sourceURL, expect["liveSourceURL"] as? String, caseId)
         }
     }
 
@@ -255,6 +288,30 @@ final class ContractFixtureTests: XCTestCase {
         let back = try JSONDecoder().decode(ZenSnapshot.self, from: data)
         XCTAssertEqual(back.spaces[0].pinned.map(\.id), ["tab-1", "split-1"])
         XCTAssertEqual(back, snapshot)
+    }
+
+    /// Live-folder metadata belongs to the app-facing model, so the local
+    /// snapshot cache must round-trip it instead of dropping it on reload.
+    func testLocalCacheRoundTripsLiveFolderMetadata() throws {
+        let folder = ZenFolder(
+            id: "f-live",
+            name: "Hacker News",
+            tabs: [],
+            live: ZenLiveFolder(type: "rss", sourceURL: "https://news.ycombinator.com/rss")
+        )
+        let snapshot = ZenSnapshot(
+            spaces: [ZenSpace(id: "s1", name: "Work", pinned: [.folder(folder)])],
+            fetchedAt: .distantPast
+        )
+        let back = try JSONDecoder().decode(
+            ZenSnapshot.self,
+            from: try JSONEncoder().encode(snapshot)
+        )
+        guard case .folder(let decoded)? = back.spaces.first?.pinned.first else {
+            return XCTFail("expected a folder in the cached snapshot")
+        }
+        XCTAssertEqual(decoded.live?.type, "rss")
+        XCTAssertEqual(decoded.live?.sourceURL, "https://news.ycombinator.com/rss")
     }
 
     // MARK: - Auth errno mapping (D3)

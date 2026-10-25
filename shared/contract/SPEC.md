@@ -120,8 +120,8 @@ decrypted cleartext.
   truthiness coercion (`wire-tab-pinned-string-false`, `wire-prefs-normal-tabs`).
   Plain JSON booleans are the only contractual form for `hasStaticIcon` and
   `defaultContainer`.
-- **Unknown fields** MUST be ignored, including structured ones such as a folder's
-  `live` object (`wire-folder-live-object`).
+- **Unknown fields** MUST be ignored, including unknown members inside a folder's
+  `live` object (§3.5.1, `wire-folder-live-object`).
 
 ### 3.2 Theme (`space.data.theme`)
 
@@ -189,7 +189,7 @@ Derived: `isNormalTab == (pinned == false)`. Never infer pinning from `children`
 membership — the wire flag is the source of truth. Normal tabs are gated by the
 `zen.spaces-sync.normal-tabs` pref (§7).
 
-### 3.5 `folder` (`wire-folder-basic`, `wire-folder-live-object`, `wire-folder-missing-folderid`)
+### 3.5 `folder` (`wire-folder-basic`, `wire-folder-live-object`, `wire-folder-live-github`, `wire-folder-live-shapes`, `wire-folder-missing-folderid`)
 
 | field            | required | notes                                  |
 |------------------|----------|----------------------------------------|
@@ -198,6 +198,7 @@ membership — the wire flag is the source of truth. Normal tabs are gated by th
 | `icon`           | no       | string.                                |
 | `workspaceUuid`  | no       | string; the owning space uuid.         |
 | `parentFolderId` | no       | string; nested folder parent.          |
+| `live`           | no       | object; live-folder metadata, §3.5.1.  |
 | `children`       | no       | string array.                          |
 
 **Hostile case.** A folder-kind record without `folderId`
@@ -216,6 +217,44 @@ nil target nor a named one.
    matches — neither for a nil target nor for a named one.
 4. The matched folder's `workspaceUuid` MUST equal `spaceId`; otherwise fall back to
    the space root so a tab never lands in an unrelated folder.
+
+### 3.5.1 `live` folder metadata (`wire-folder-live-object`, `wire-folder-live-github`, `wire-folder-live-shapes`)
+
+A folder record MAY carry a `live` object. Its presence marks the folder as a live
+folder. Zen generates a live folder's items on the device that owns it and syncs only
+the provider configuration, never the items themselves.
+
+| field        | required | notes                                                        |
+|--------------|----------|--------------------------------------------------------------|
+| `type`       | no       | non-empty string provider id, e.g. `rss`, `github`.           |
+| `state`      | no       | JSON object; provider configuration.                          |
+| `state.url`  | no       | string; the provider's source URL.                            |
+
+Canonical decoded form:
+
+- `isLiveFolder` — `true` exactly when `data.live` is a JSON object; `null`, a
+  string, an array or a number decode as "not a live folder"
+  (`wire-folder-live-shapes`).
+- `liveType` — the trimmed non-empty `type` string, otherwise absent. Unknown
+  provider ids are kept unchanged.
+- `liveSourceURL` — `state.url` when it is an absolute `http` or `https` URL with a
+  host; otherwise absent. `http` sources are valid (Zen's own fetcher accepts
+  them). Values such as `javascript:…`, relative paths or non-strings never decode
+  to a source.
+
+`live` never changes where the folder sits or how it looks in the list: it stays an
+ordinary folder record (name, icon, children). The metadata only describes how Zen
+generates the folder's items, so a client MAY use it for a provider label or a link
+to the source inside the expanded folder. It MUST NOT invent items from it.
+
+Unknown members inside `live` and `state` MUST be ignored; they are provider state
+this contract does not model (for example `maxItems`, `timeRange`, `repos`).
+
+**Items are not part of the contract.** Zen excludes the tabs a live folder
+generates from `tab` records and from the folder's `children`, so a client MUST
+NOT expect them. A reader MUST NOT synthesize or upload them, and MUST NOT read an
+empty `children` list as a deleted or broken folder. Writes MUST preserve `live`
+unchanged (§7.5.5).
 
 ### 3.6 `split` (`wire-split-basic`, `wire-split-normal-pinned-false`)
 

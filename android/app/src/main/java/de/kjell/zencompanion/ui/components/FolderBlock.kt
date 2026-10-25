@@ -16,6 +16,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.Link
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -120,6 +124,18 @@ fun FolderBlock(
             // get the SAME leading indent. Recursion provides the depth; no
             // extra padding is stacked onto the sub-folder rows.
             Column(modifier = Modifier.padding(start = expandedIndent)) {
+                val liveSource = folder.live?.sourceURL
+                if (liveSource != null &&
+                    folder.tabs.isEmpty() &&
+                    folder.subfolders.isNullOrEmpty()
+                ) {
+                    LiveFolderSource(
+                        source = liveSource,
+                        providerType = folder.live?.type,
+                        onOpenSource = { source, title -> onOpenUrl?.invoke(source, title) },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
                 for (tab in folder.tabs) {
                     TabRow(
                         tab = tab,
@@ -148,4 +164,75 @@ fun FolderBlock(
             }
         }
     }
+}
+
+/**
+ * Zen syncs only a live folder's provider configuration, never the items it
+ * generates. When the folder is empty (the normal case on mobile), the expanded
+ * body offers the configured source instead of looking broken.
+ */
+@Composable
+private fun LiveFolderSource(
+    source: String,
+    providerType: String?,
+    onOpenSource: (String, String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val provider = when (providerType) {
+        "rss" -> stringResource(R.string.folder_live_rss)
+        "github" -> stringResource(R.string.folder_live_github)
+        else -> stringResource(R.string.folder_live_other)
+    }
+    Surface(
+        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f),
+        shape = RoundedCornerShape(10.dp),
+        modifier = modifier
+            .clip(RoundedCornerShape(10.dp))
+            .clickable { onOpenSource(source, provider) },
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.Link,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                modifier = Modifier.size(16.dp),
+            )
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = provider,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = sourceDisplay(source),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            Icon(
+                imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                modifier = Modifier.size(16.dp),
+            )
+        }
+    }
+}
+
+/** Host plus path, so `github.com/pulls` stays readable without the scheme. */
+private fun sourceDisplay(source: String): String {
+    val uri = runCatching { java.net.URI(source) }.getOrNull() ?: return source
+    val host = uri.host ?: return source
+    val path = uri.path.orEmpty()
+    return if (path.isEmpty() || path == "/") host else host + path
 }

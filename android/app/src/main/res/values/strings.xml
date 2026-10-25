@@ -59,6 +59,9 @@
 
     <string name="tabs_empty">No tabs here yet.</string>
     <string name="tabs_folder">Folder</string>
+    <string name="folder_live_rss">RSS feed</string>
+    <string name="folder_live_github">GitHub</string>
+    <string name="folder_live_other">Live folder</string>
     <string name="pin_folder_menu">Pin to Folder…</string>
     <string name="tabs_delete">Delete tab</string>
     <string name="tabs_rename">Rename</string>

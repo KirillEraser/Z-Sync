@@ -282,6 +282,19 @@ object ZenSpaces {
         val workspaceUuid: String?,
         val parentFolderId: String?,
         val children: List<String>?,
+        /** Live-folder provider metadata (SPEC §3.5.1). Null for a plain folder. */
+        val live: ZenLiveFolder? = null,
+    )
+
+    /**
+     * Provider metadata of a live folder (SPEC §3.5.1). Zen syncs only how the
+     * folder is generated; the generated items are never part of the collection.
+     */
+    class ZenLiveFolder(
+        /** Provider id, e.g. `rss` or `github`. Unknown ids are kept. */
+        val type: String?,
+        /** `state.url`, only when it is an absolute http(s) URL with a host. */
+        val sourceURL: String?,
     )
 
     class ZenSplitRecord(
@@ -335,6 +348,8 @@ object ZenSpaces {
         val tabs: List<ZenTab>,
         /** Folders nested inside this one, in sidebar order. Null = none. */
         val subfolders: List<ZenFolder>? = null,
+        /** Live-folder provider metadata (SPEC §3.5.1). Null for a plain folder. */
+        val live: ZenLiveFolder? = null,
     )
 
     data class ZenSplit(
@@ -593,7 +608,31 @@ object ZenSpaces {
             workspaceUuid = optStringOrNull(data, "workspaceUuid"),
             parentFolderId = optStringOrNull(data, "parentFolderId"),
             children = optStringList(data, "children"),
+            live = decodeLiveFolder(data.optJSONObject("live")),
         )
+    }
+
+    /**
+     * SPEC §3.5.1: the presence of a JSON object marks a live folder, the
+     * provider id must be a non-empty string, and only an absolute http(s) URL
+     * with a host counts as a source. Unknown state members are ignored.
+     */
+    private fun decodeLiveFolder(live: JSONObject?): ZenLiveFolder? {
+        live ?: return null
+        val type = optStringOrNull(live, "type")?.trim()?.takeIf { it.isNotEmpty() }
+        val url = live.optJSONObject("state")?.let { optStringOrNull(it, "url") }
+        return ZenLiveFolder(type = type, sourceURL = normalizeSourceUrl(url))
+    }
+
+    /** SPEC §3.5.1: only absolute http(s) URLs with a host are usable sources. */
+    internal fun normalizeSourceUrl(raw: String?): String? {
+        val value = raw?.trim().orEmpty()
+        if (value.isEmpty()) return null
+        val uri = runCatching { java.net.URI(value) }.getOrNull() ?: return null
+        val scheme = uri.scheme?.lowercase()
+        if (scheme != "http" && scheme != "https") return null
+        if (uri.host.isNullOrEmpty()) return null
+        return value
     }
 
     private fun decodeSplit(data: JSONObject): ZenSplitRecord? {
@@ -744,6 +783,12 @@ object ZenSpaces {
         f.put("id", folder.id)
         f.put("name", folder.name)
         folder.icon?.let { f.put("icon", it) }
+        folder.live?.let { live ->
+            val l = JSONObject()
+            live.type?.let { l.put("type", it) }
+            live.sourceURL?.let { l.put("sourceURL", it) }
+            f.put("live", l)
+        }
         val ftabs = JSONArray()
         folder.tabs.forEach { ftabs.put(encodeTab(it)) }
         f.put("tabs", ftabs)
@@ -890,6 +935,12 @@ object ZenSpaces {
             icon = optStringOrNull(folderObj, "icon"),
             tabs = tabs,
             subfolders = subfolders.takeIf { it.isNotEmpty() },
+            live = folderObj.optJSONObject("live")?.let { l ->
+                ZenLiveFolder(
+                    type = optStringOrNull(l, "type"),
+                    sourceURL = optStringOrNull(l, "sourceURL"),
+                )
+            },
         )
     }
 
