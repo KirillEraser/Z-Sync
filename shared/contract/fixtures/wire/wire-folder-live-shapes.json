@@ -1,0 +1,196 @@
+{
+  "contract": 1,
+  "id": "wire-folder-live-shapes",
+  "purpose": "Hostile and partial live values: only a JSON object is a live folder, the provider id must be a non-empty string, and only absolute http(s) source URLs decode.",
+  "cases": [
+    {
+      "id": "live-null",
+      "input": {
+        "id": "f-live-null",
+        "kind": "folder",
+        "data": { "folderId": "f-live-null", "live": null }
+      },
+      "expect": {
+        "decodesAs": "folder",
+        "isLiveFolder": false,
+        "liveType": null,
+        "liveSourceURL": null
+      }
+    },
+    {
+      "id": "live-string",
+      "input": {
+        "id": "f-live-string",
+        "kind": "folder",
+        "data": { "folderId": "f-live-string", "live": "rss" }
+      },
+      "expect": {
+        "decodesAs": "folder",
+        "isLiveFolder": false,
+        "liveType": null,
+        "liveSourceURL": null
+      }
+    },
+    {
+      "id": "live-array",
+      "input": {
+        "id": "f-live-array",
+        "kind": "folder",
+        "data": { "folderId": "f-live-array", "live": ["rss"] }
+      },
+      "expect": {
+        "decodesAs": "folder",
+        "isLiveFolder": false,
+        "liveType": null,
+        "liveSourceURL": null
+      }
+    },
+    {
+      "id": "live-empty-object",
+      "input": {
+        "id": "f-live-empty",
+        "kind": "folder",
+        "data": { "folderId": "f-live-empty", "live": {} }
+      },
+      "expect": {
+        "decodesAs": "folder",
+        "isLiveFolder": true,
+        "liveType": null,
+        "liveSourceURL": null
+      }
+    },
+    {
+      "id": "live-type-non-string",
+      "input": {
+        "id": "f-live-type-number",
+        "kind": "folder",
+        "data": { "folderId": "f-live-type-number", "live": { "type": 7 } }
+      },
+      "expect": {
+        "decodesAs": "folder",
+        "isLiveFolder": true,
+        "liveType": null,
+        "liveSourceURL": null
+      }
+    },
+    {
+      "id": "live-empty-type",
+      "input": {
+        "id": "f-live-type-empty",
+        "kind": "folder",
+        "data": { "folderId": "f-live-type-empty", "live": { "type": "   " } }
+      },
+      "expect": {
+        "decodesAs": "folder",
+        "isLiveFolder": true,
+        "liveType": null,
+        "liveSourceURL": null
+      }
+    },
+    {
+      "id": "live-unknown-provider",
+      "input": {
+        "id": "f-live-rest",
+        "kind": "folder",
+        "data": {
+          "folderId": "f-live-rest",
+          "live": {
+            "type": "rest",
+            "state": { "url": "https://api.example.com/items", "mapping": { "items": "data" } }
+          }
+        }
+      },
+      "expect": {
+        "decodesAs": "folder",
+        "isLiveFolder": true,
+        "liveType": "rest",
+        "liveSourceURL": "https://api.example.com/items"
+      }
+    },
+    {
+      "id": "live-http-source",
+      "input": {
+        "id": "f-live-http",
+        "kind": "folder",
+        "data": {
+          "folderId": "f-live-http",
+          "live": { "type": "rss", "state": { "url": "http://example.com/feed" } }
+        }
+      },
+      "expect": {
+        "decodesAs": "folder",
+        "isLiveFolder": true,
+        "liveType": "rss",
+        "liveSourceURL": "http://example.com/feed"
+      }
+    },
+    {
+      "id": "live-script-url",
+      "input": {
+        "id": "f-live-script",
+        "kind": "folder",
+        "data": {
+          "folderId": "f-live-script",
+          "live": { "type": "rss", "state": { "url": "javascript:alert(1)" } }
+        }
+      },
+      "expect": {
+        "decodesAs": "folder",
+        "isLiveFolder": true,
+        "liveType": "rss",
+        "liveSourceURL": null
+      }
+    },
+    {
+      "id": "live-relative-url",
+      "input": {
+        "id": "f-live-relative",
+        "kind": "folder",
+        "data": {
+          "folderId": "f-live-relative",
+          "live": { "type": "rss", "state": { "url": "/feed.xml" } }
+        }
+      },
+      "expect": {
+        "decodesAs": "folder",
+        "isLiveFolder": true,
+        "liveType": "rss",
+        "liveSourceURL": null
+      }
+    },
+    {
+      "id": "live-url-non-string",
+      "input": {
+        "id": "f-live-url-number",
+        "kind": "folder",
+        "data": {
+          "folderId": "f-live-url-number",
+          "live": { "type": "rss", "state": { "url": 42 } }
+        }
+      },
+      "expect": {
+        "decodesAs": "folder",
+        "isLiveFolder": true,
+        "liveType": "rss",
+        "liveSourceURL": null
+      }
+    },
+    {
+      "id": "live-state-not-object",
+      "input": {
+        "id": "f-live-state-string",
+        "kind": "folder",
+        "data": {
+          "folderId": "f-live-state-string",
+          "live": { "type": "rss", "state": "nope" }
+        }
+      },
+      "expect": {
+        "decodesAs": "folder",
+        "isLiveFolder": true,
+        "liveType": "rss",
+        "liveSourceURL": null
+      }
+    }
+  ]
+}

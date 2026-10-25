@@ -597,6 +597,39 @@
     "FEEDBACK" : {
 
     },
+    "folder.live.github" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "GitHub"
+          }
+        }
+      }
+    },
+    "folder.live.other" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Live folder"
+          }
+        }
+      }
+    },
+    "folder.live.rss" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "RSS feed"
+          }
+        }
+      }
+    },
     "home.delete_failed" : {
       "extractionState" : "manual",
       "localizations" : {

@@ -55,7 +55,7 @@ class ContractFixtureTests {
     /** Every golden fixture must load with contract == 1 and id == basename. */
     @Test
     fun everyGoldenFixtureLoads() {
-        assertEquals(30, FixtureLoader.allFixtureNames.size)
+        assertEquals(32, FixtureLoader.allFixtureNames.size)
         for (name in FixtureLoader.allFixtureNames) {
             FixtureLoader.json(name)
             FixtureLoader.data(name)
@@ -129,6 +129,10 @@ class ContractFixtureTests {
             ?: fail("wire-folder-live-object must decode as folder")
         assertEquals(expectNullableString(liveExpect, "icon"), live.icon)
         assertEquals(expectStrings(liveExpect, "children"), live.children)
+        assertEquals(expectNullableString(liveExpect, "liveType"), live.live?.type)
+        assertEquals(expectNullableString(liveExpect, "liveSourceURL"), live.live?.sourceURL)
+
+        assertNull("wire-folder-basic is not a live folder", basic.live)
 
         // Hostile (wire-folder-missing-folderid): folder-shaped for matching,
         // dropped by the decoder, never matches any target request.
@@ -142,6 +146,37 @@ class ContractFixtureTests {
         val namedTarget = (0 until requests.length()).mapNotNull { requests.opt(it) as? String }.single()
         assertEquals(hostileExpect.getBoolean("matchesNilTarget"), SpacesSyncService.isTargetFolder(null, data))
         assertEquals(hostileExpect.getBoolean("matchesFolder1"), SpacesSyncService.isTargetFolder(namedTarget, data))
+    }
+
+    /** SPEC §3.5.1: provider id and source URL are schema; everything else is opaque. */
+    @Test
+    fun wireFolderLiveShapes() {
+        val githubExpect = expectOf("wire-folder-live-github")
+        val github = (decodeInput("wire-folder-live-github") as? ZenSpaces.DecodedRecord.Folder)?.record
+            ?: fail("wire-folder-live-github must decode as folder")
+        assertEquals(expectNullableString(githubExpect, "liveType"), github.live?.type)
+        assertEquals(expectNullableString(githubExpect, "liveSourceURL"), github.live?.sourceURL)
+
+        val cases = FixtureLoader.json("wire-folder-live-shapes").getJSONArray("cases")
+        for (i in 0 until cases.length()) {
+            val caseJson = cases.getJSONObject(i)
+            val caseId = caseJson.getString("id")
+            val input = caseJson.getJSONObject("input")
+            val expect = caseJson.getJSONObject("expect")
+            val folder = (ZenSpaces.decode(input.optString("id"), input) as? ZenSpaces.DecodedRecord.Folder)?.record
+                ?: fail("$caseId: expected a folder record")
+            assertEquals("$caseId isLiveFolder", expect.getBoolean("isLiveFolder"), folder.live != null)
+            assertEquals(
+                "$caseId liveType",
+                expectNullableString(expect, "liveType"),
+                folder.live?.type,
+            )
+            assertEquals(
+                "$caseId liveSourceURL",
+                expectNullableString(expect, "liveSourceURL"),
+                folder.live?.sourceURL,
+            )
+        }
     }
 
     @Test

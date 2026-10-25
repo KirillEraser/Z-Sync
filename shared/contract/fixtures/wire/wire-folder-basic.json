@@ -22,6 +22,7 @@
     "icon": "📁",
     "workspaceUuid": "space-1",
     "parentFolderId": null,
-    "children": ["tab-b"]
+    "children": ["tab-b"],
+    "isLiveFolder": false
   }
 }

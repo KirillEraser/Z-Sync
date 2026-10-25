@@ -440,7 +440,8 @@ enum SpacesSyncService {
             name: folder.name ?? "",
             icon: folder.icon.flatMap { $0.isEmpty ? nil : $0 },
             tabs: tabs,
-            subfolders: subfolders.isEmpty ? nil : subfolders
+            subfolders: subfolders.isEmpty ? nil : subfolders,
+            live: folder.live
         )
     }
 

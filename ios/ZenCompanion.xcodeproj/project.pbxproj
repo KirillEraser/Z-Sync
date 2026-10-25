@@ -52,7 +52,9 @@
 		320F97DDCD9ADFCDBCBDD0E9 /* PageTitleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFFA07EAB8BF501529A487C9 /* PageTitleTests.swift */; };
 		345394CC540463196A1A2B2A /* http-get-pagination-page1.json in Resources */ = {isa = PBXBuildFile; fileRef = 2CDB9C1B8E5A38C7F6DFB808 /* http-get-pagination-page1.json */; };
 		34B5F6C02FC6DFD12E25BBAE /* HawkAuth.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87F67934C58A3E31F34DE9F1 /* HawkAuth.swift */; };
+		C8E2D3B45F60718293A4B5C6 /* wire-folder-live-github.json in Resources */ = {isa = PBXBuildFile; fileRef = B7F1C2A34D5E6F708192A3B4 /* wire-folder-live-github.json */; };
 		3B453AC63D0B2F85F7567B46 /* wire-folder-live-object.json in Resources */ = {isa = PBXBuildFile; fileRef = A21182091EF25B43A894C77E /* wire-folder-live-object.json */; };
+		EAF4B5D67B8293A4B5C6D7E8 /* wire-folder-live-shapes.json in Resources */ = {isa = PBXBuildFile; fileRef = D9A3E4C56A718293A4B5C6D7 /* wire-folder-live-shapes.json */; };
 		3DA07C7571495D0048F18E7F /* crypto-sync-key-bundle-kb-zero.json in Resources */ = {isa = PBXBuildFile; fileRef = 03BD7BE97B660B7EED4A63E8 /* crypto-sync-key-bundle-kb-zero.json */; };
 		3DDBF0EAB3BFDF5F84C460CA /* PageTitle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 827188806D099B9F7AF2BEDB /* PageTitle.swift */; };
 		3E5DED947C378656FDE0782A /* BrowserErrorPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D92EA7707307871E9728FD7 /* BrowserErrorPanel.swift */; };
@@ -335,7 +337,9 @@
 		9D9749F42F501781D56A21F8 /* wire-split-normal-pinned-false.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "wire-split-normal-pinned-false.json"; sourceTree = "<group>"; };
 		A006678CAB750D920916FD35 /* BrowserModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserModel.swift; sourceTree = "<group>"; };
 		A04F36D04DCF5C3E6DD02D6F /* wire-ignored-records.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "wire-ignored-records.json"; sourceTree = "<group>"; };
+		B7F1C2A34D5E6F708192A3B4 /* wire-folder-live-github.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "wire-folder-live-github.json"; sourceTree = "<group>"; };
 		A21182091EF25B43A894C77E /* wire-folder-live-object.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "wire-folder-live-object.json"; sourceTree = "<group>"; };
+		D9A3E4C56A718293A4B5C6D7 /* wire-folder-live-shapes.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "wire-folder-live-shapes.json"; sourceTree = "<group>"; };
 		AB2E8046902A7F4DDE56F47F /* crypto-unbundle-account-keys.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "crypto-unbundle-account-keys.json"; sourceTree = "<group>"; };
 		AB4EBDF9AB517249F1B92769 /* SpacesSyncService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpacesSyncService.swift; sourceTree = "<group>"; };
 		AC8A4220C0C946481B3FBE5F /* EssentialsColumns.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EssentialsColumns.swift; sourceTree = "<group>"; };
@@ -688,7 +692,9 @@
 			children = (
 				1D7BD019B688C2D73978BD77 /* wire-deleted-string.json */,
 				9D07354B20A9ED3267F782F5 /* wire-folder-basic.json */,
+				B7F1C2A34D5E6F708192A3B4 /* wire-folder-live-github.json */,
 				A21182091EF25B43A894C77E /* wire-folder-live-object.json */,
+				D9A3E4C56A718293A4B5C6D7 /* wire-folder-live-shapes.json */,
 				EE02B211DA82FA93751A302C /* wire-folder-missing-folderid.json */,
 				A04F36D04DCF5C3E6DD02D6F /* wire-ignored-records.json */,
 				EE8DAB5E9AEB5FFAD2C4B430 /* wire-layout-basic.json */,
@@ -899,7 +905,9 @@
 				01D00F248A606B457E005F48 /* http-put-412.json in Resources */,
 				88097158424099557EE82904 /* wire-deleted-string.json in Resources */,
 				D508CCB693E85A2744954F48 /* wire-folder-basic.json in Resources */,
+				C8E2D3B45F60718293A4B5C6 /* wire-folder-live-github.json in Resources */,
 				3B453AC63D0B2F85F7567B46 /* wire-folder-live-object.json in Resources */,
+				EAF4B5D67B8293A4B5C6D7E8 /* wire-folder-live-shapes.json in Resources */,
 				CBD0593F21886FDB97B8C1F6 /* wire-folder-missing-folderid.json in Resources */,
 				A1D668D8E6E5145C06B9B917 /* wire-ignored-records.json in Resources */,
 				D6D621E0D34C86B4A7DEBD7D /* wire-layout-basic.json in Resources */,

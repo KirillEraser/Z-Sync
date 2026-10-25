@@ -33,6 +33,10 @@ class SnapshotCodecTests {
                     ZenSpaces.ZenFolder(
                         id = "f1", name = "Docs", icon = null,
                         tabs = listOf(ZenSpaces.ZenTab(id = "t2", url = "https://b.de", title = "B")),
+                        live = ZenSpaces.ZenLiveFolder(
+                            type = "rss",
+                            sourceURL = "https://example.com/feed.xml",
+                        ),
                         subfolders = listOf(
                             ZenSpaces.ZenFolder(
                                 id = "f2", name = "Specs", icon = "page",
@@ -62,6 +66,8 @@ class SnapshotCodecTests {
         assertTrue(s.pinned[1] is ZenSpaces.ZenItem.Folder)
         val folder = (s.pinned[1] as ZenSpaces.ZenItem.Folder).folder
         assertEquals("Docs", folder.name)
+        assertEquals("rss", folder.live?.type)
+        assertEquals("https://example.com/feed.xml", folder.live?.sourceURL)
         assertEquals("Specs", folder.subfolders?.single()?.name)
         assertEquals("t3", folder.subfolders?.single()?.tabs?.single()?.id)
         assertEquals(1, decoded.essentials["default"]?.size)

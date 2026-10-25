@@ -1,7 +1,7 @@
 {
   "contract": 1,
   "id": "wire-folder-live-object",
-  "purpose": "Unknown fields such as the live object are ignored; the folder record still decodes and icon null stays null.",
+  "purpose": "A folder's live object decodes to provider metadata; unmodelled state members (maxItems, timeRange) are ignored and icon null stays null.",
   "input": {
     "id": "f1",
     "kind": "folder",
@@ -12,8 +12,12 @@
       "workspaceUuid": "space-a",
       "parentFolderId": null,
       "live": {
-        "kind": "rss",
-        "feedUrl": "https://example.com/rss"
+        "type": "rss",
+        "state": {
+          "url": "https://example.com/feed.xml",
+          "maxItems": 10,
+          "timeRange": 0
+        }
       },
       "children": ["t2"]
     }
@@ -26,6 +30,8 @@
     "workspaceUuid": "space-a",
     "parentFolderId": null,
     "children": ["t2"],
-    "unknownFieldsIgnored": ["live"]
+    "isLiveFolder": true,
+    "liveType": "rss",
+    "liveSourceURL": "https://example.com/feed.xml"
   }
 }

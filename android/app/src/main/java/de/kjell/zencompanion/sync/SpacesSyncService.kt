@@ -493,6 +493,7 @@ object SpacesSyncService {
             icon = folder.icon?.takeIf { it.isNotEmpty() },
             tabs = tabs,
             subfolders = subfolders.takeIf { it.isNotEmpty() },
+            live = folder.live,
         )
     }
 

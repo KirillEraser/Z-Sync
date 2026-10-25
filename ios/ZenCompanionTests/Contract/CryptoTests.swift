@@ -319,6 +319,19 @@ final class ZenSpacesDecoderTests: XCTestCase {
         XCTAssertEqual(folder.workspaceUuid, expect["workspaceUuid"] as? String)
         XCTAssertEqual(folder.children, expect["children"] as? [String])
         XCTAssertNil(folder.icon, "icon null stays null")
+        XCTAssertEqual(folder.live?.type, expect["liveType"] as? String)
+        XCTAssertEqual(folder.live?.sourceURL, expect["liveSourceURL"] as? String)
+    }
+
+    func testFolderWithoutLiveObjectHasNoLiveMetadata() throws {
+        let (input, expect) = vector("wire-folder-basic")
+        guard case .folder(let folder)? = ZenSpacesDecoder.decode(
+            id: input["id"] as! String, cleartext: input
+        ) else {
+            return XCTFail("expected folder record")
+        }
+        XCTAssertNil(folder.live, "live null is a plain folder")
+        XCTAssertEqual(expect["isLiveFolder"] as? Bool, false)
     }
 
     // MARK: Splits
