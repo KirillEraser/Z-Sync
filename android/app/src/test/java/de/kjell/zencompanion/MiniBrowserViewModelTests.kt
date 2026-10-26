@@ -10,6 +10,7 @@ import de.kjell.zencompanion.sync.SyncError
 import de.kjell.zencompanion.sync.ZenSpaces
 import de.kjell.zencompanion.ui.BrowserRepository
 import de.kjell.zencompanion.ui.browser.MiniBrowserViewModel
+import de.kjell.zencompanion.ui.browser.SearchSuggestionClient
 import de.kjell.zencompanion.ui.components.PinDestination
 import de.kjell.zencompanion.ui.screens.BrowserPageError
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -48,12 +49,16 @@ class MiniBrowserViewModelTests {
         repository: FakeMiniBrowserRepository = FakeMiniBrowserRepository(),
         initialUrl: String? = "https://start.example/",
         spaces: List<ZenSpaces.ZenSpace> = listOf(testSpace("s1"), testSpace("s2")),
+        suggestionClient: SearchSuggestionClient = ForbiddenSuggestionClient(),
+        suggestionDebounceMs: Long = 200,
     ) = MiniBrowserViewModel(
         repository = repository,
         initialUrl = initialUrl,
         initialTitle = "Start",
         spaces = spaces,
         currentSpaceId = "s1",
+        suggestionClient = suggestionClient,
+        suggestionDebounceMs = suggestionDebounceMs,
     )
 
     @Test
@@ -274,6 +279,7 @@ class MiniBrowserViewModelTests {
         val repository = FakeMiniBrowserRepository(
             saveKind = SaveKind.NORMAL,
             fallBackToPinned = true,
+            capability = ZenSpaces.NormalTabsCapability.ENABLED,
         )
         val vm = newViewModel(repository)
 
@@ -339,6 +345,56 @@ class MiniBrowserViewModelTests {
     }
 
     @Test
+    fun pinKindStartsFromTheSettingAndCanChange() = runTest(mainDispatcherRule.testDispatcher) {
+        val repository = FakeMiniBrowserRepository()
+        val vm = newViewModel(repository)
+
+        vm.triggerPinBanner()
+        assertEquals(SaveKind.PINNED, vm.state.value.saveKind)
+
+        vm.selectPinSaveKind(SaveKind.NORMAL)
+        assertEquals(SaveKind.NORMAL, vm.state.value.saveKind)
+
+        vm.commitPendingPinSave()
+        runCurrent()
+
+        assertEquals(SaveKind.NORMAL, repository.added.single().kind)
+    }
+
+    @Test
+    fun normalKindNeedsTheCapability() = runTest(mainDispatcherRule.testDispatcher) {
+        val repository = FakeMiniBrowserRepository(
+            saveKind = SaveKind.NORMAL,
+            capability = ZenSpaces.NormalTabsCapability.DISABLED,
+        )
+        val vm = newViewModel(repository)
+
+        vm.triggerPinBanner()
+        assertEquals(SaveKind.PINNED, vm.state.value.saveKind)
+
+        vm.selectPinSaveKind(SaveKind.NORMAL)
+        assertEquals(SaveKind.PINNED, vm.state.value.saveKind)
+    }
+
+    @Test
+    fun pinKindIsNotPersisted() = runTest(mainDispatcherRule.testDispatcher) {
+        val repository = FakeMiniBrowserRepository()
+        val vm = newViewModel(repository)
+
+        vm.triggerPinBanner()
+        vm.selectPinSaveKind(SaveKind.NORMAL)
+        vm.startNewLaunch(
+            launchKey = 99,
+            initialUrl = "https://start.example/",
+            initialTitle = "Start",
+            spaces = listOf(testSpace("s1"), testSpace("s2")),
+            currentSpaceId = "s1",
+        )
+
+        assertEquals(SaveKind.PINNED, vm.state.value.saveKind)
+    }
+
+    @Test
     fun deferredPinSaveRunsOnlyOnce() = runTest(mainDispatcherRule.testDispatcher) {
         val repository = FakeMiniBrowserRepository()
         val vm = newViewModel(repository)
@@ -353,12 +409,140 @@ class MiniBrowserViewModelTests {
         advanceTimeBy(5_000)
         runCurrent()
     }
+
+    @Test
+    fun urlInputDoesNotRequestSuggestions() = runTest(mainDispatcherRule.testDispatcher) {
+        val client = RecordingSuggestionClient()
+        val vm = newViewModel(initialUrl = null, suggestionClient = client)
+        vm.onAddressFocusChange(true)
+
+        listOf(
+            "https://example.com/private",
+            "http://example.com/foo bar",
+            "example.com",
+            "   ",
+        ).forEach { text ->
+            vm.onAddressTextChange(TextFieldValue(text))
+            advanceTimeBy(1_000)
+            runCurrent()
+        }
+
+        assertTrue(client.requested.isEmpty())
+        assertTrue(vm.state.value.suggestions.isEmpty())
+    }
+
+    @Test
+    fun searchQueryRequestsSuggestionsAfterDebounce() = runTest(mainDispatcherRule.testDispatcher) {
+        val client = RecordingSuggestionClient("""["zen",["zen browser","zen browser download"]]""")
+        val vm = newViewModel(initialUrl = null, suggestionClient = client)
+        vm.onAddressFocusChange(true)
+        vm.onAddressTextChange(TextFieldValue("zen browser"))
+
+        advanceTimeBy(199)
+        runCurrent()
+        assertTrue(client.requested.isEmpty())
+
+        advanceTimeBy(20)
+        runCurrent()
+        assertEquals(1, client.requested.size)
+        assertTrue(client.requested.single().contains("q=zen+browser"))
+        assertEquals(listOf("zen browser", "zen browser download"), vm.state.value.suggestions)
+    }
+
+    @Test
+    fun changingToAUrlCancelsThePendingQuery() = runTest(mainDispatcherRule.testDispatcher) {
+        val client = RecordingSuggestionClient()
+        val vm = newViewModel(
+            initialUrl = null,
+            suggestionClient = client,
+            suggestionDebounceMs = 30_000,
+        )
+        vm.onAddressFocusChange(true)
+        vm.onAddressTextChange(TextFieldValue("hello"))
+        advanceTimeBy(100)
+        vm.onAddressTextChange(TextFieldValue("https://secret.example/path"))
+        advanceTimeBy(30_000)
+        runCurrent()
+
+        assertTrue(client.requested.isEmpty())
+        assertTrue(vm.state.value.suggestions.isEmpty())
+    }
+
+    @Test
+    fun customEngineDoesNotRequestSuggestions() = runTest(mainDispatcherRule.testDispatcher) {
+        SearchEngines.current = SearchEngine(
+            id = "kagi",
+            displayName = "Kagi",
+            template = "https://kagi.com/search?q={query}",
+            isBuiltIn = false,
+        )
+        val client = RecordingSuggestionClient()
+        val vm = newViewModel(initialUrl = null, suggestionClient = client)
+        vm.onAddressFocusChange(true)
+        vm.onAddressTextChange(TextFieldValue("hello"))
+        advanceTimeBy(1_000)
+        runCurrent()
+
+        assertTrue(client.requested.isEmpty())
+    }
+
+    @Test
+    fun closingTheFieldDropsTheList() = runTest(mainDispatcherRule.testDispatcher) {
+        val client = RecordingSuggestionClient("""["zen",["zen browser"]]""")
+        val vm = newViewModel(initialUrl = null, suggestionClient = client)
+        vm.onAddressFocusChange(true)
+        vm.onAddressTextChange(TextFieldValue("zen"))
+
+        advanceTimeBy(500)
+        runCurrent()
+        assertEquals(listOf("zen browser"), vm.state.value.suggestions)
+
+        vm.endAddressEdit()
+        assertTrue(vm.state.value.suggestions.isEmpty())
+    }
+
+    @Test
+    fun selectedSuggestionSearchesAndClosesTheList() = runTest(mainDispatcherRule.testDispatcher) {
+        val client = RecordingSuggestionClient("""["zen",["zen browser"]]""")
+        val vm = newViewModel(initialUrl = null, suggestionClient = client)
+        vm.onAddressFocusChange(true)
+        vm.onAddressTextChange(TextFieldValue("zen"))
+        advanceTimeBy(500)
+        runCurrent()
+
+        val target = vm.selectSuggestion("node.js")
+        advanceTimeBy(1_000)
+        runCurrent()
+
+        assertEquals(SearchEngine.DUCKDUCKGO.searchURL("node.js"), target)
+        assertTrue(vm.state.value.suggestions.isEmpty())
+        // The text write that follows a pick must not start another lookup.
+        assertEquals(1, client.requested.size)
+    }
+}
+
+private class RecordingSuggestionClient(
+    private val body: String = "[]",
+) : SearchSuggestionClient {
+    val requested = mutableListOf<String>()
+
+    override suspend fun fetch(url: String): String {
+        requested += url
+        return body
+    }
+}
+
+private class ForbiddenSuggestionClient : SearchSuggestionClient {
+    override suspend fun fetch(url: String): String {
+        error("suggest request was not allowed: $url")
+    }
 }
 
 private class FakeMiniBrowserRepository(
     var saveKind: SaveKind = SaveKind.PINNED,
     var fallBackToPinned: Boolean = false,
     var failure: Exception? = null,
+    var capability: ZenSpaces.NormalTabsCapability = ZenSpaces.NormalTabsCapability.ENABLED,
 ) : BrowserRepository {
     data class AddedTab(
         val url: String,
@@ -371,7 +555,7 @@ private class FakeMiniBrowserRepository(
     val added = mutableListOf<AddedTab>()
 
     override val cachedSnapshot: ZenSpaces.ZenSnapshot?
-        get() = null
+        get() = ZenSpaces.ZenSnapshot(emptyList()).copy(normalTabsCapability = capability)
 
     override fun lastSpaceId(): String? = null
 

@@ -17,14 +17,12 @@ struct SpacesBrowserView: View {
     let account: AccountSnapshot
 
     @Environment(\.colorScheme) private var scheme
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.requestReview) private var requestReview
     @State private var model: BrowserModel
 
     private enum ActiveSheet: Identifiable, Equatable {
         case account
-        case browser(BrowserTabSession)
         case activity
         case syncSetup
         case whatsNew
@@ -32,7 +30,6 @@ struct SpacesBrowserView: View {
         var id: String {
             switch self {
             case .account: return "account"
-            case .browser(let session): return session.id.uuidString
             case .activity: return "activity"
             case .syncSetup: return "syncSetup"
             case .whatsNew: return "whatsNew"
@@ -45,49 +42,15 @@ struct SpacesBrowserView: View {
     }
 
     @State private var activeSheet: ActiveSheet?
+    /// The mini-browser is a page, not a sheet: it fills the screen on every
+    /// size class, and its own close control is the only way out.
+    @State private var browserSession: BrowserTabSession?
     /// Once-per-app-version release notes. Marked as presented as soon as the
     /// sheet opens, so a relaunch does not show it again.
     @State private var whatsNew: WhatsNewStore
-    /// Locked when the browser opens. A later size-class change must not swap
-    /// the sheet and the cover, or the page reloads.
-    @State private var browserFillsScreen = false
     /// A pin inside the mini-browser (or a delete from it) fired while a sheet
     /// was up; refresh once the last sheet is gone.
     @State private var pendingStaleReload = false
-
-    /// Compact browser and the other sheets. A regular-width browser is left
-    /// out, so the sheet writing nil as it dismisses cannot clear the cover.
-    private var compactSheet: Binding<ActiveSheet?> {
-        Binding(
-            get: {
-                if browserFillsScreen, case .browser = activeSheet { return nil }
-                return activeSheet
-            },
-            set: { newValue in
-                if browserFillsScreen, case .browser = activeSheet, newValue == nil {
-                    return
-                }
-                if newValue == nil, case .browser = activeSheet {
-                    browserFillsScreen = false
-                }
-                activeSheet = newValue
-            }
-        )
-    }
-
-    private var fullScreenBrowser: Binding<BrowserTabSession?> {
-        Binding(
-            get: {
-                guard browserFillsScreen, case .browser(let session) = activeSheet else { return nil }
-                return session
-            },
-            set: { newValue in
-                guard newValue == nil, case .browser = activeSheet else { return }
-                activeSheet = nil
-                browserFillsScreen = false
-            }
-        )
-    }
 
     init(account: AccountSnapshot) {
         self.account = account
@@ -267,7 +230,7 @@ struct SpacesBrowserView: View {
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
-        .sheet(item: compactSheet) { sheet in
+        .sheet(item: $activeSheet) { sheet in
             switch sheet {
             case .account:
                 SettingsSheet(
@@ -285,11 +248,6 @@ struct SpacesBrowserView: View {
                 // page full height, like the app's other sheets.
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
-            case .browser(let session):
-                miniBrowser(session, spaces: model.snapshot.spaces)
-                    .presentationDetents([.large])
-                    .presentationDragIndicator(.visible)
-                    .geometryGroup()
             case .activity:
                 SyncedActivitySheet(
                     allSpaces: model.snapshot.spaces,
@@ -319,9 +277,15 @@ struct SpacesBrowserView: View {
                     .presentationDragIndicator(.visible)
             }
         }
-        .fullScreenCover(item: fullScreenBrowser) { session in
+        .fullScreenCover(item: $browserSession) { session in
             miniBrowser(session, spaces: model.snapshot.spaces)
-                .geometryGroup()
+                .onDisappear {
+                    // A pin inside the mini-browser fired while it was up.
+                    if pendingStaleReload {
+                        pendingStaleReload = false
+                        Task { await model.reload() }
+                    }
+                }
         }
         .task { await model.initialLoad() }
         .task {
@@ -336,7 +300,9 @@ struct SpacesBrowserView: View {
             activeSheet = .whatsNew
         }
         .onReceive(NotificationCenter.default.publisher(for: .zenCompanionSnapshotStale)) { _ in
-            guard activeSheet == nil else {
+            // A pin inside the browser happens while the browser is up, so the
+            // browser has to count as "open" too or the reload runs underneath it.
+            guard activeSheet == nil, browserSession == nil else {
                 pendingStaleReload = true
                 return
             }
@@ -360,7 +326,7 @@ struct SpacesBrowserView: View {
         .onChange(of: model.searchOnOpenPending) { _, pending in
             guard pending else { return }
             // Leave an open browser or settings sheet where the user left it.
-            if activeSheet == nil { openNewTab(in: model.activeSpace) }
+            if activeSheet == nil, browserSession == nil { openNewTab(in: model.activeSpace) }
             model.consumeSearchOnOpen()
         }
         .onChange(of: model.reviewPromptPending) { _, pending in
@@ -466,12 +432,20 @@ struct SpacesBrowserView: View {
         presentBrowser(url: nil, title: nil, space: space)
     }
 
-    /// Decides the presentation once. `horizontalSizeClass` is read here, not
-    /// while the browser is already up.
+    /// Opens the browser as a page. A sheet that is already up has to go
+    /// first: SwiftUI will not present a full-screen cover over one.
     private func presentBrowser(url: URL?, title: String?, space: ZenSpace) {
-        let presentation = QuickBrowserPresentationPolicy.presentation(for: horizontalSizeClass)
-        browserFillsScreen = presentation == .fullScreen
-        activeSheet = .browser(BrowserTabSession(url: url, initialTitle: title, space: space))
+        let session = BrowserTabSession(url: url, initialTitle: title, space: space)
+        guard activeSheet != nil else {
+            browserSession = session
+            return
+        }
+        activeSheet = nil
+        Task { @MainActor in
+            // Sheet dismissal has to start before the cover can take over.
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            browserSession = session
+        }
     }
 
     private func miniBrowser(_ session: BrowserTabSession, spaces: [ZenSpace]) -> some View {
@@ -480,14 +454,9 @@ struct SpacesBrowserView: View {
             initialTitle: session.initialTitle,
             space: session.space,
             allSpaces: spaces,
-            showsToolbarClose: browserFillsScreen,
-            onDismiss: { dismissPresentedBrowser() }
+            allowsNormalTabs: model.snapshot.normalTabsCapability.allowsNormalTabs,
+            onDismiss: { browserSession = nil }
         )
-    }
-
-    private func dismissPresentedBrowser() {
-        activeSheet = nil
-        browserFillsScreen = false
     }
 
     // MARK: States (shown until the first successful sync)
@@ -602,14 +571,6 @@ struct FolderBlock: View {
             .buttonStyle(PressedButtonStyle())
 
             if isExpanded {
-                if let live = folder.live,
-                   let source = live.sourceURL,
-                   folder.tabs.isEmpty,
-                   folder.subfolders?.isEmpty ?? true {
-                    liveFolderSource(source, type: live.type)
-                        .padding(.leading, 20)
-                        .transition(.opacity)
-                }
                 ForEach(folder.tabs) { tab in
                     TabRow(
                         tab: tab,
@@ -661,64 +622,5 @@ struct FolderBlock: View {
     /// older records may carry (raw or inside Zen's emoji SVG).
     private var userIcon: String? {
         ZenIconDecoder.folderFlapIcon(folder.icon)
-    }
-
-    /// Zen syncs only a live folder's provider configuration, never the items it
-    /// generates. When the folder is empty (the normal case on mobile), the
-    /// expanded body offers the configured source instead of looking broken.
-    private func liveFolderSource(_ source: String, type: String?) -> some View {
-        let url = URL(string: source)
-        let label = providerLabel(type)
-        return Button {
-            onOpenTab(ZenTab(id: "live-source-\(folder.id)", url: source, title: label))
-        } label: {
-            HStack(spacing: 10) {
-                Image(systemName: "link")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Palette.ink(scheme).opacity(0.5))
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(label)
-                        .font(.system(size: 13, weight: .semibold, design: .rounded))
-                        .foregroundStyle(Palette.ink(scheme))
-                    Text(sourceDisplay(url))
-                        .font(.system(size: 11, design: .rounded))
-                        .foregroundStyle(Palette.ink(scheme).opacity(0.55))
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 0)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Palette.ink(scheme).opacity(0.3))
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(
-                Palette.lift(scheme),
-                in: RoundedRectangle(cornerRadius: 10, style: .continuous)
-            )
-            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        }
-        .buttonStyle(PressedButtonStyle())
-        .accessibilityLabel(Text(label))
-        .accessibilityValue(Text(sourceDisplay(url)))
-    }
-
-    /// Provider label for the source row; unknown ids fall back to a neutral
-    /// label rather than exposing the raw id.
-    private func providerLabel(_ type: String?) -> String {
-        switch type {
-        case "rss": return String(localized: "folder.live.rss")
-        case "github": return String(localized: "folder.live.github")
-        default: return String(localized: "folder.live.other")
-        }
-    }
-
-    /// Host plus path, so `github.com/pulls` stays readable without the scheme.
-    private func sourceDisplay(_ url: URL?) -> String {
-        guard let url, let host = url.host, !host.isEmpty else {
-            return url?.absoluteString ?? ""
-        }
-        let path = url.path
-        return path.isEmpty || path == "/" ? host : host + path
     }
 }

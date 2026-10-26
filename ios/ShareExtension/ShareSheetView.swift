@@ -156,8 +156,13 @@ struct ShareSheetView: View {
                 if model.allowsNormalTabs {
                     // Keep the round button whole; the pill is the part that
                     // may have to truncate on a narrow sheet.
-                    saveKindMenu
-                        .layoutPriority(1)
+                    SaveKindMenuButton(
+                        kind: model.saveKind,
+                        scheme: effectiveScheme,
+                        isEnabled: model.phase != .saving,
+                        onSelect: { model.selectSaveKind($0) }
+                    )
+                    .layoutPriority(1)
                 }
             }
             .padding(.top, 28)
@@ -203,43 +208,6 @@ struct ShareSheetView: View {
             .padding(.horizontal, 24)
             .padding(.bottom, 28)
         }
-    }
-
-    /// Per-share kind menu: the round companion to the destination pill, but
-    /// tapping it opens the pinned/normal choice instead of toggling. Only
-    /// shown when the synced browser can write normal tabs; leaving it
-    /// untouched keeps the persisted setting.
-    private var saveKindMenu: some View {
-        Menu {
-            // A picker gives the menu its native checkmark and lets VoiceOver
-            // announce the selected option.
-            Picker(
-                selection: Binding(
-                    get: { model.saveKind },
-                    set: { model.selectSaveKind($0) }
-                )
-            ) {
-                Text("share.save_kind.pinned_menu").tag(SaveKind.pinned)
-                Text("share.save_kind.normal_menu").tag(SaveKind.normal)
-            } label: {
-                Text("share.save_as")
-            }
-            .pickerStyle(.inline)
-        } label: {
-            Image(systemName: model.saveKind == .pinned ? "pin.fill" : "rectangle.stack")
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(Palette.ink(effectiveScheme))
-                .frame(width: 44, height: 44)
-                .background(
-                    Circle().fill(Palette.lift(effectiveScheme))
-                )
-                .glassRimCapsule()
-                .contentShape(Circle())
-        }
-        .accessibilityLabel(Text("share.save_as"))
-        .accessibilityValue(Text(LocalizedStringKey(model.saveKind == .pinned ? "share.save_kind.pinned" : "share.save_kind.normal")))
-        .accessibilityHint(Text("share.save_kind.hint"))
-        .disabled(model.phase == .saving)
     }
 
     private func status(title: String, detail: String, systemImage: String? = nil, action: String?, run: @escaping () -> Void) -> some View {
