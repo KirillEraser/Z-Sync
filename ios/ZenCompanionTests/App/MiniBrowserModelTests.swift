@@ -13,7 +13,10 @@ final class MiniBrowserModelTests: XCTestCase {
         initialURL: URL?,
         engine: FakeSearchEngine = FakeSearchEngine(),
         writer: FakePinWriter = FakePinWriter(),
-        preferences: FakePreferences? = nil
+        preferences: FakePreferences? = nil,
+        allowsNormalTabs: Bool = false,
+        suggestions: RecordingSuggestionClient = RecordingSuggestionClient(),
+        suggestionDebounce: Duration = .zero
     ) -> (MiniBrowserModel, FakePinWriter) {
         let model = MiniBrowserModel(
             initialURL: initialURL,
@@ -21,7 +24,10 @@ final class MiniBrowserModelTests: XCTestCase {
             urlOpener: FakeURLOpener(),
             searchEngine: engine,
             haptics: FakeHaptics(),
-            preferences: preferences ?? FakePreferences()
+            preferences: preferences ?? FakePreferences(),
+            allowsNormalTabs: allowsNormalTabs,
+            suggestionClient: suggestions,
+            suggestionDebounce: suggestionDebounce
         )
         return (model, writer)
     }
@@ -73,6 +79,77 @@ final class MiniBrowserModelTests: XCTestCase {
 
         model.addressText = "   "
         XCTAssertNil(model.effectiveURL)
+    }
+
+    // MARK: - Page menu tools
+
+    func testMenuOpensOnlyWhenAPageExists() {
+        let (model, _) = makeModel(initialURL: nil)
+        model.toggleMenu()
+        XCTAssertFalse(model.menuExpanded)
+
+        model.currentURL = URL(string: "https://example.com")
+        model.toggleMenu()
+        XCTAssertTrue(model.menuExpanded)
+        model.toggleMenu()
+        XCTAssertFalse(model.menuExpanded)
+    }
+
+    func testZoomClampsToHalfAndDouble() {
+        let (model, _) = makeModel(initialURL: nil)
+        XCTAssertEqual(model.pageZoom, 1, accuracy: 0.001)
+        XCTAssertEqual(MiniBrowserTools.zoomPercentLabel(1), "100%")
+
+        model.zoomIn()
+        XCTAssertEqual(model.pageZoom, 1.1, accuracy: 0.001)
+
+        model.setPageZoom(9)
+        XCTAssertEqual(model.pageZoom, MiniBrowserTools.zoomMax, accuracy: 0.001)
+        XCTAssertFalse(model.canZoomIn)
+        model.zoomIn()
+        XCTAssertEqual(model.pageZoom, MiniBrowserTools.zoomMax, accuracy: 0.001)
+
+        model.setPageZoom(0.01)
+        XCTAssertEqual(model.pageZoom, MiniBrowserTools.zoomMin, accuracy: 0.001)
+        XCTAssertFalse(model.canZoomOut)
+        XCTAssertEqual(MiniBrowserTools.zoomPercentLabel(model.pageZoom), "50%")
+    }
+
+    func testDesktopSiteTogglesWithoutAWebView() {
+        let (model, _) = makeModel(initialURL: URL(string: "https://example.com"))
+        XCTAssertFalse(model.requestsDesktopSite)
+        model.toggleDesktopSite()
+        XCTAssertTrue(model.requestsDesktopSite)
+        model.toggleDesktopSite()
+        XCTAssertFalse(model.requestsDesktopSite)
+    }
+
+    func testFindOnPageClosesTheMenu() {
+        let (model, _) = makeModel(initialURL: URL(string: "https://example.com")!)
+        model.currentURL = URL(string: "https://example.com")
+        model.toggleMenu()
+        model.presentFindOnPage()
+        XCTAssertFalse(model.menuExpanded)
+    }
+
+    func testCopyCurrentLink() {
+        let previous = UIPasteboard.general.url
+        defer { UIPasteboard.general.url = previous }
+
+        let (model, _) = makeModel(initialURL: nil)
+        XCTAssertFalse(model.copyCurrentLink())
+
+        let url = URL(string: "https://example.com/copied")!
+        model.currentURL = url
+        XCTAssertTrue(model.copyCurrentLink())
+        XCTAssertEqual(UIPasteboard.general.url, url)
+    }
+
+    func testPageHostUsesDisplayText() {
+        let (model, _) = makeModel(initialURL: nil)
+        XCTAssertEqual(model.pageHost, "")
+        model.currentURL = URL(string: "https://www.example.com/path")
+        XCTAssertEqual(model.pageHost, "www.example.com")
     }
 
     // MARK: - Pin save
@@ -181,23 +258,19 @@ final class MiniBrowserModelTests: XCTestCase {
         XCTAssertTrue(writer.saved.isEmpty)
     }
 
-    func testPinBannerGlassSuppressedOnceDestinationPickerOpened() {
+    func testDestinationPickerKeepsTheBannerAlive() {
         let (model, _) = makeModel(initialURL: URL(string: "https://pin.example/page")!)
 
         model.triggerPinBanner(spaces: [space("a")], fallbackSpace: space("a"))
-        XCTAssertFalse(model.pinBannerGlassSuppressed)
+        XCTAssertTrue(model.showPinBanner)
 
+        // Opening the destination picker cancels the auto-dismiss, and closing
+        // it only restarts the timer: the banner stays up either way.
         model.pinMenuWillOpen()
-        XCTAssertTrue(model.pinBannerGlassSuppressed)
+        XCTAssertTrue(model.showPinBanner)
 
-        // Stays suppressed after the menu closes: iOS 26 keeps rendering the
-        // glass as an opaque slab through the closing animation.
         model.pinMenuDidDismiss()
-        XCTAssertTrue(model.pinBannerGlassSuppressed)
-
-        // A fresh banner (new pin tap) brings the glass back.
-        model.triggerPinBanner(spaces: [space("a")], fallbackSpace: space("a"))
-        XCTAssertFalse(model.pinBannerGlassSuppressed)
+        XCTAssertTrue(model.showPinBanner)
     }
 
     // MARK: - Save kind (normal tabs)
@@ -205,7 +278,8 @@ final class MiniBrowserModelTests: XCTestCase {
     func testNormalSaveKindUsesRootAndPassesNormalKind() async {
         let (model, writer) = makeModel(
             initialURL: URL(string: "https://pin.example/page")!,
-            preferences: preferences(saveKind: .normal)
+            preferences: preferences(saveKind: .normal),
+            allowsNormalTabs: true
         )
 
         model.triggerPinBanner(spaces: [space("a")], fallbackSpace: space("a"))
@@ -279,7 +353,8 @@ final class MiniBrowserModelTests: XCTestCase {
         let (model, _) = makeModel(
             initialURL: URL(string: "https://pin.example/page")!,
             writer: writer,
-            preferences: preferences(saveKind: .normal)
+            preferences: preferences(saveKind: .normal),
+            allowsNormalTabs: true
         )
 
         model.triggerPinBanner(spaces: [space("a")], fallbackSpace: space("a"))
@@ -299,7 +374,8 @@ final class MiniBrowserModelTests: XCTestCase {
         let (model, _) = makeModel(
             initialURL: URL(string: "https://pin.example/page")!,
             writer: writer,
-            preferences: preferences(saveKind: .normal)
+            preferences: preferences(saveKind: .normal),
+            allowsNormalTabs: true
         )
 
         model.triggerPinBanner(spaces: [space("a")], fallbackSpace: space("a"))
@@ -307,6 +383,59 @@ final class MiniBrowserModelTests: XCTestCase {
         await model.waitForPinSave()
 
         XCTAssertNil(model.pinNotice)
+    }
+
+    func testPinKindStartsFromTheSettingAndCanChange() async {
+        let (model, writer) = makeModel(
+            initialURL: URL(string: "https://pin.example/page")!,
+            preferences: preferences(saveKind: .pinned),
+            allowsNormalTabs: true
+        )
+
+        model.triggerPinBanner(spaces: [space("a")], fallbackSpace: space("a"))
+        XCTAssertEqual(model.pinSaveKind, .pinned, "the saved setting is the default")
+
+        model.selectPinSaveKind(.normal)
+        XCTAssertEqual(model.pinSaveKind, .normal)
+
+        model.commitPendingPinSave()
+        await model.waitForPinSave()
+        XCTAssertEqual(writer.saved.first?.kind, .normal, "the per-save choice is what gets written")
+    }
+
+    func testNormalKindNeedsTheCapability() async {
+        let (model, _) = makeModel(
+            initialURL: URL(string: "https://pin.example/page")!,
+            preferences: preferences(saveKind: .normal)
+        )
+
+        model.triggerPinBanner(spaces: [space("a")], fallbackSpace: space("a"))
+        XCTAssertEqual(model.pinSaveKind, .pinned, "without the capability only pinned is possible")
+
+        model.selectPinSaveKind(.normal)
+        XCTAssertEqual(model.pinSaveKind, .pinned)
+    }
+
+    func testPinKindIsNotPersisted() async {
+        let (model, _) = makeModel(
+            initialURL: URL(string: "https://pin.example/page")!,
+            preferences: preferences(saveKind: .pinned),
+            allowsNormalTabs: true
+        )
+
+        model.triggerPinBanner(spaces: [space("a")], fallbackSpace: space("a"))
+        model.selectPinSaveKind(.normal)
+        model.commitPendingPinSave()
+        await model.waitForPinSave()
+
+        // The next save starts from the setting again.
+        let (next, _) = makeModel(
+            initialURL: URL(string: "https://pin.example/page")!,
+            preferences: preferences(saveKind: .pinned),
+            allowsNormalTabs: true
+        )
+        next.triggerPinBanner(spaces: [space("a")], fallbackSpace: space("a"))
+        XCTAssertEqual(next.pinSaveKind, .pinned)
     }
 
     // MARK: - Error panel
@@ -425,6 +554,99 @@ final class MiniBrowserModelTests: XCTestCase {
         XCTAssertFalse(model.leaveErrorPage())
         XCTAssertEqual(webView.wentBack, 1)
     }
+
+    // MARK: - Suggestions
+
+    func testURLInputDoesNotRequestSuggestions() async {
+        let client = RecordingSuggestionClient()
+        let (model, _) = makeModel(initialURL: nil, suggestions: client)
+
+        let urls = [
+            "https://example.com/private",
+            "http://example.com/foo bar",
+            "example.com",
+            "   \n",
+            "mailto:support@kjell.cc",
+        ]
+        for text in urls {
+            model.addressText = text
+            model.refreshSuggestions(isEditing: true)
+            await model.waitForSuggestions()
+        }
+
+        XCTAssertTrue(client.requested.isEmpty)
+        XCTAssertTrue(model.suggestions.isEmpty)
+    }
+
+    func testSearchQueryRequestsSuggestionsAndParsesThem() async {
+        let client = RecordingSuggestionClient()
+        client.body = Data(#"["zen",["zen browser","zen browser download"]]"#.utf8)
+        let (model, _) = makeModel(initialURL: nil, suggestions: client)
+        model.addressText = "zen browser"
+        model.refreshSuggestions(isEditing: true)
+        await model.waitForSuggestions()
+
+        XCTAssertEqual(client.requested.count, 1)
+        let items = URLComponents(url: client.requested[0], resolvingAgainstBaseURL: false)?.queryItems
+        XCTAssertEqual(items?.first { $0.name == "q" }?.value, "zen browser")
+        XCTAssertEqual(model.suggestions, ["zen browser", "zen browser download"])
+    }
+
+    func testChangingToAURLCancelsThePendingQuery() async {
+        let client = RecordingSuggestionClient()
+        let (model, _) = makeModel(initialURL: nil, suggestions: client, suggestionDebounce: .zero)
+        model.addressText = "hello"
+        model.refreshSuggestions(isEditing: true)
+        // Still on the main actor, so the first request has not started.
+        // Replacing it with a URL must cancel it before any request leaves.
+        model.addressText = "https://secret.example/path"
+        model.refreshSuggestions(isEditing: true)
+        for _ in 0..<10 {
+            await Task.yield()
+        }
+
+        XCTAssertTrue(client.requested.isEmpty)
+        XCTAssertTrue(model.suggestions.isEmpty)
+    }
+
+    func testSuggestionFailureShowsNoList() async {
+        let client = RecordingSuggestionClient()
+        client.error = URLError(.notConnectedToInternet)
+        let (model, _) = makeModel(initialURL: nil, suggestions: client)
+        model.addressText = "hello"
+        model.refreshSuggestions(isEditing: true)
+        await model.waitForSuggestions()
+
+        XCTAssertEqual(client.requested.count, 1)
+        XCTAssertTrue(model.suggestions.isEmpty)
+    }
+
+    func testCustomEngineDoesNotRequestSuggestions() async {
+        let client = RecordingSuggestionClient()
+        let engine = FakeSearchEngine()
+        engine.current = ZenCompanion.SearchEngine(
+            id: "kagi",
+            displayName: "Kagi",
+            template: "https://kagi.com/search?q={query}",
+            isBuiltIn: false
+        )
+        let (model, _) = makeModel(initialURL: nil, engine: engine, suggestions: client)
+        model.addressText = "hello"
+        model.refreshSuggestions(isEditing: true)
+        await model.waitForSuggestions()
+
+        XCTAssertTrue(client.requested.isEmpty)
+    }
+
+    func testClosedFieldDoesNotRequestSuggestions() async {
+        let client = RecordingSuggestionClient()
+        let (model, _) = makeModel(initialURL: nil, suggestions: client)
+        model.addressText = "hello"
+        model.refreshSuggestions(isEditing: false)
+        await model.waitForSuggestions()
+
+        XCTAssertTrue(client.requested.isEmpty)
+    }
 }
 
 // MARK: - Fakes
@@ -474,6 +696,29 @@ private final class FakeSearchEngine: SearchEngineProviding {
 
     var current: ZenCompanion.SearchEngine = .duckDuckGo
     var custom: [ZenCompanion.SearchEngine] = []
+}
+
+final class RecordingSuggestionClient: SearchSuggestionFetching, @unchecked Sendable {
+    private let lock = NSLock()
+    private var urls: [URL] = []
+    var body = Data("[]".utf8)
+    var error: Error?
+
+    var requested: [URL] {
+        lock.lock()
+        defer { lock.unlock() }
+        return urls
+    }
+
+    func fetch(_ url: URL) async throws -> Data {
+        lock.lock()
+        urls.append(url)
+        let failure = error
+        let payload = body
+        lock.unlock()
+        if let failure { throw failure }
+        return payload
+    }
 }
 
 @MainActor

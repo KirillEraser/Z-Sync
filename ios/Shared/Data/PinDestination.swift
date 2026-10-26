@@ -315,34 +315,16 @@ struct PinDestinationMenuButton: UIViewRepresentable {
         } else {
             icon = nil
         }
-        let chevron = UIImage(systemName: "chevron.up.chevron.down")?
-            .withTintColor(ink.withAlphaComponent(0.5), renderingMode: .alwaysOriginal)
-            .withConfiguration(UIImage.SymbolConfiguration(pointSize: 10, weight: .bold))
-        if let composed = Self.compose(icon: icon, chevron: chevron, gap: 7) {
-            config.image = composed
+        if let icon {
+            // The space's own icon leads, like the kind control on the left of
+            // the row; the menu's chevron is the button's own trailing mark.
+            config.image = icon
+            config.imagePlacement = .leading
             config.imagePadding = 7
         }
+        config.indicator = .popup
 
         button.configuration = config
-    }
-
-    /// Lays the leading icon and the trailing chevron into one strip, since
-    /// UIButton.Configuration carries a single image.
-    private static func compose(icon: UIImage?, chevron: UIImage?, gap: CGFloat) -> UIImage? {
-        guard icon != nil || chevron != nil else { return nil }
-        let height: CGFloat = 24
-        let iconSize = icon?.size ?? .zero
-        let chevronSize = chevron?.size ?? .zero
-        let width = iconSize.width + (icon != nil && chevron != nil ? gap : 0) + chevronSize.width
-        let renderer = UIGraphicsImageRenderer(size: CGSize(width: max(width, 1), height: height))
-        return renderer.image { _ in
-            if let icon {
-                icon.draw(in: CGRect(x: 0, y: (height - iconSize.height) / 2, width: iconSize.width, height: iconSize.height))
-            }
-            if let chevron {
-                chevron.draw(in: CGRect(x: iconSize.width + gap, y: (height - chevronSize.height) / 2, width: chevronSize.width, height: chevronSize.height))
-            }
-        }
     }
 
     final class Coordinator: NSObject {
